@@ -1,0 +1,36 @@
+import { initializeApp } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
+
+const env = import.meta.env;
+
+export const firebaseConfig = {
+  apiKey: env.VITE_FIREBASE_API_KEY,
+  authDomain: env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: env.VITE_FIREBASE_APP_ID,
+};
+
+export const app = initializeApp(firebaseConfig);
+export const auth = getAuth(app);
+// 오프라인 캐시: 지하철 등에서 잠깐 끊겨도 입력이 저장되고 다시 연결되면 올라감
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+});
+
+const names: Record<string, string> = {};
+String(env.VITE_USER_NAMES || '')
+  .split(',')
+  .map((s: string) => s.trim())
+  .filter(Boolean)
+  .forEach((pair: string) => {
+    const [email, name] = pair.split(':');
+    if (email && name) names[email.trim().toLowerCase()] = name.trim();
+  });
+
+export function nameOf(email?: string | null): string {
+  if (!email) return '';
+  return names[email.toLowerCase()] || email.split('@')[0];
+}

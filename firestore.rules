@@ -1,0 +1,18 @@
+rules_version = '2';
+
+// 두 사람 이메일만 읽기/쓰기 허용. 아래 두 주소를 실제 로그인 이메일로 바꾸세요.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function allowed() {
+      return request.auth != null
+        && request.auth.token.email in [
+          'gwangbae@example.com',
+          'minju@example.com'
+        ];
+    }
+
+    match /{document=**} {
+      allow read, write: if allowed();
+    }
+  }
+}
