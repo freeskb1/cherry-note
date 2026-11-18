@@ -4,7 +4,7 @@ import { remove, removePhoto, save, saveLists, savePhoto, usePhoto } from '../da
 import { compressImage } from '../image';
 import { Note } from '../types';
 import { matches, md } from '../util';
-import { Chips, DeleteButton, Empty, Fab, Field, Icon, LinkText, SearchBox, Sheet, StarButton, useToast } from '../ui';
+import { Chips, DeleteButton, Empty, Fab, Field, Icon, LinkText, PhotoViewer, SearchBox, Sheet, StarButton, useToast } from '../ui';
 
 export default function Notes() {
   const { notes, lists, openId, clearOpen, ready } = useStore();
@@ -65,9 +65,11 @@ export default function Notes() {
 
 function Thumb({ id, onRemove }: { id: string; onRemove: () => void }) {
   const url = usePhoto(id);
+  const [open, setOpen] = useState(false);
   return (
     <div className="thumb-wrap">
-      {url ? <a href={url} target="_blank" rel="noreferrer"><img className="thumb" src={url} alt="첨부 사진" /></a> : <div className="thumb ph" />}
+      {url ? <button type="button" className="photo-btn" onClick={() => setOpen(true)} aria-label="사진 크게 보기"><img className="thumb" src={url} alt="첨부 사진" /></button> : <div className="thumb ph" />}
+      <PhotoViewer url={open ? url : null} onClose={() => setOpen(false)} />
       <button type="button" className="thumb-x" aria-label="사진 빼기" onClick={onRemove}><Icon name="x" size={14} stroke={2.4} /></button>
     </div>
   );

@@ -5,7 +5,7 @@ import { compressImage, shareToAlbum } from '../image';
 import { enablePush, pushState, PushState } from '../push';
 import { SLOT_LABEL, SLOTS, Slot, Sugar } from '../types';
 import { downloadIcs, hm, isIOS, pad, remain, toTs, today, ymd } from '../util';
-import { DeleteButton, Field, Icon, Sheet, useToast } from '../ui';
+import { DeleteButton, Field, Icon, PhotoViewer, Sheet, useToast } from '../ui';
 import { getAlarmMode, openPhoneAlarm, phoneAlarmSupported } from '../phoneAlarm';
 
 const TWO_H = 2 * 60 * 60 * 1000;
@@ -158,6 +158,11 @@ export default function SugarScreen() {
               <small>수치 입력 전</small>
             )}
           </button>
+          {live && due > now && (getAlarmMode() !== 'off' && phoneAlarmSupported() ? (
+            <button type="button" className="slot-bell" aria-label="폰 알람 다시 맞추기" onClick={() => openPhoneAlarm(due, `체리 ${label} 혈당`)}><Icon name="bell" size={20} /></button>
+          ) : push !== 'on' && !phoneAlarmSupported() ? (
+            <button type="button" className="slot-bell" aria-label="캘린더에 알람 넣기" onClick={() => downloadIcs(`${label} 식후 2시간 혈당`, due)}><Icon name="bell" size={20} /></button>
+          ) : null)}
           <button type="button" className="num go" onClick={() => setKeypad({ slot, date: sel })}>입력</button>
         </div>
       );
@@ -325,6 +330,7 @@ function EditSheet({ rec, targets, onClose }: { rec: Sugar | null; targets: { ta
   const [memo, setMemo] = useState('');
   const [photoId, setPhotoId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [viewing, setViewing] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const url = usePhoto(photoId);
 
@@ -381,10 +387,10 @@ function EditSheet({ rec, targets, onClose }: { rec: Sugar | null; targets: { ta
       <form className="form" onSubmit={(e) => { e.preventDefault(); submit(); }}>
         {meal && (
           <div className="photo-edit">
-            {url ? <a href={url} target="_blank" rel="noreferrer"><img src={url} alt="식사 사진" /></a> : <div className="ph">사진 없음</div>}
+            {url ? <button type="button" className="photo-btn" onClick={() => setViewing(true)} aria-label="사진 크게 보기"><img src={url} alt="식사 사진" /></button> : <div className="ph">사진 없음</div>}
             <div className="col">
               <button type="button" className="btn-ghost" disabled={busy} onClick={() => fileRef.current?.click()}>{busy ? '올리는 중…' : '사진 바꾸기'}</button>
-              {url && <a className="btn-ghost" href={url} target="_blank" rel="noreferrer">크게 보기</a>}
+              {url && <button type="button" className="btn-ghost" onClick={() => setViewing(true)}>크게 보기</button>}
             </div>
             <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => { changePhoto(e.target.files?.[0]); e.target.value = ''; }} />
           </div>
@@ -419,6 +425,7 @@ function EditSheet({ rec, targets, onClose }: { rec: Sugar | null; targets: { ta
           <button type="submit" className="btn-primary grow" disabled={busy}>저장</button>
         </div>
       </form>
+      <PhotoViewer url={viewing ? url : null} onClose={() => setViewing(false)} />
     </Sheet>
   );
 }

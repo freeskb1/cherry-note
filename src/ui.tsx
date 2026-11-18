@@ -227,3 +227,20 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     </ToastCtx.Provider>
   );
 }
+
+/** 사진 크게 보기: 화면 전체에 띄우고 아무 데나 누르면 닫힘 */
+export function PhotoViewer({ url, onClose }: { url: string | null; onClose: () => void }) {
+  useEffect(() => {
+    if (!url) return;
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [url, onClose]);
+  if (!url) return null;
+  return (
+    <div className="viewer" role="dialog" aria-modal="true" aria-label="사진 크게 보기" onClick={onClose}>
+      <img src={url} alt="사진" />
+      <button type="button" className="viewer-x" aria-label="닫기" onClick={onClose}><Icon name="x" size={22} stroke={2.2} /></button>
+    </div>
+  );
+}
