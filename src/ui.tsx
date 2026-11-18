@@ -115,16 +115,23 @@ export function Field({ label, children, htmlFor }: { label: string; children: R
 
 /** 두 번 눌러야 지워지는 삭제 버튼 */
 export function DeleteButton({ onDelete }: { onDelete: () => void }) {
-  const [armed, setArmed] = useState(false);
-  useEffect(() => {
-    if (!armed) return;
-    const t = setTimeout(() => setArmed(false), 3000);
-    return () => clearTimeout(t);
-  }, [armed]);
+  const [ask, setAsk] = useState(false);
   return (
-    <button type="button" className={'btn-del' + (armed ? ' armed' : '')} onClick={() => (armed ? onDelete() : setArmed(true))}>
-      {armed ? '한 번 더' : '삭제'}
-    </button>
+    <>
+      <button type="button" className="btn-del" onClick={() => setAsk(true)}>삭제</button>
+      {ask && (
+        <div className="confirm-wrap" onClick={() => setAsk(false)}>
+          <div className="confirm" role="alertdialog" aria-modal="true" aria-label="삭제 확인" onClick={(e) => e.stopPropagation()}>
+            <div className="confirm-title">삭제할까요?</div>
+            <div className="confirm-body">지우면 되돌릴 수 없어요.</div>
+            <div className="confirm-actions">
+              <button type="button" className="btn-ghost grow" onClick={() => setAsk(false)}>취소</button>
+              <button type="button" className="btn-danger grow" onClick={() => { setAsk(false); onDelete(); }}>삭제</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 

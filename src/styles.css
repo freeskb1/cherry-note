@@ -317,3 +317,11 @@ select.fld { appearance: none; background-image: linear-gradient(45deg, transpar
 .login .sub { color: var(--muted); font-size: 13px; margin: 0 0 8px; }
 .login form { width: 100%; max-width: 340px; display: flex; flex-direction: column; gap: 10px; }
 .err { color: var(--danger); font-size: 13px; }
+
+/* 삭제 확인 */
+.confirm-wrap { position: fixed; inset: 0; z-index: 70; background: var(--scrim); display: flex; align-items: center; justify-content: center; padding: 24px; }
+.confirm { width: 100%; max-width: 320px; background: var(--card); border-radius: 18px; padding: 20px; display: flex; flex-direction: column; gap: 8px; text-align: center; }
+.confirm-title { font-size: 17px; font-weight: 700; }
+.confirm-body { font-size: 13px; color: var(--muted); }
+.confirm-actions { display: flex; gap: 8px; margin-top: 8px; }
+.btn-danger { min-height: 46px; border: none; border-radius: 12px; background: var(--danger); color: #fff; font-size: 15px; font-weight: 700; }

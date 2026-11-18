@@ -13,9 +13,10 @@ const KEY = 'cherry.alarmMode';
 export function getAlarmMode(): AlarmMode {
   try {
     const v = localStorage.getItem(KEY);
-    return v === 'button' || v === 'auto' ? v : 'off';
+    if (v === 'button' || v === 'auto' || v === 'off') return v;
+    return phoneAlarmSupported() ? 'auto' : 'off';
   } catch {
-    return 'off';
+    return phoneAlarmSupported() ? 'auto' : 'off';
   }
 }
 

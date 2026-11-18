@@ -99,7 +99,7 @@ export default function SugarScreen() {
       const phoneLabel = `체리 ${SLOT_LABEL[slot]} 혈당`;
       if (needAlarm && mode !== 'off' && phoneAlarmSupported()) {
         actions.push({ label: '폰 알람', run: async () => { openPhoneAlarm(measureAt!, phoneLabel); } });
-      } else if (needAlarm && push !== 'on') {
+      } else if (needAlarm && push !== 'on' && !phoneAlarmSupported()) {
         actions.push({ label: '캘린더', run: async () => downloadIcs(`${SLOT_LABEL[slot]} 식후 2시간 혈당`, measureAt!) });
       }
       toast(hasValue ? '사진을 바꿨어요' : needAlarm ? `저장 · ${hm(measureAt)} 알람` : '사진을 저장했어요', actions, 7000);
