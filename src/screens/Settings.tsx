@@ -4,7 +4,9 @@ import { useStore } from '../App';
 import { auth, nameOf } from '../firebase';
 import { saveSettings } from '../data';
 import { enablePush, pushState, PushState, testLocalNotification } from '../push';
-import { Field, Icon, useToast } from '../ui';
+import { Field, Icon, Seg, useToast } from '../ui';
+import { AlarmMode, getAlarmMode, openPhoneAlarm, phoneAlarmSupported, setAlarmMode, SHORTCUT_NAME } from '../phoneAlarm';
+import { isIOS } from '../util';
 
 const PUSH_TEXT: Record<PushState, string> = {
   on: '켜짐',
@@ -20,6 +22,7 @@ export default function SettingsScreen() {
   const [push, setPush] = useState<PushState>('off');
   const [busy, setBusy] = useState('');
   const [f, setF] = useState(settings);
+  const [alarmMode, setAlarmModeState] = useState<AlarmMode>(getAlarmMode());
 
   useEffect(() => {
     pushState().then(setPush);
@@ -78,6 +81,34 @@ export default function SettingsScreen() {
           {push === 'on' && <button type="button" className="btn-small ghost" onClick={async () => { if (!(await testLocalNotification())) toast('앱을 새로고침한 뒤 다시 시도해 주세요'); }}>테스트</button>}
         </div>
         <div className="hint">알림은 이 폰에서 각각 켜야 해요. 아이폰은 사파리 공유 → 홈 화면에 추가 → 그 아이콘으로 연 다음 켜주세요.</div>
+      </section>
+
+      <section className="panel">
+        <div className="t">폰 알람 (시계 앱)</div>
+        <div className="muted small">
+          {phoneAlarmSupported()
+            ? isIOS()
+              ? `무음 모드에서도 울리는 진짜 알람이에요. 단축어 '${SHORTCUT_NAME}'가 필요해요.`
+              : '시계 앱에 알람을 맞춰요. 기종에 따라 동작하지 않을 수 있어요.'
+            : '아이폰·안드로이드 폰에서만 쓸 수 있어요.'}
+        </div>
+        {phoneAlarmSupported() && (
+          <>
+            <Seg
+              items={[
+                { key: 'off', label: '안 씀' },
+                { key: 'button', label: '버튼으로' },
+                { key: 'auto', label: '사진 찍으면 자동' },
+              ]}
+              value={alarmMode}
+              onChange={(m) => { setAlarmModeState(m); setAlarmMode(m); }}
+            />
+            <button type="button" className="btn-ghost" onClick={() => { if (!openPhoneAlarm(Date.now() + 2 * 60000, '체리 알람 테스트')) toast('이 폰에서는 열 수 없어요'); }}>
+              테스트: 2분 뒤 알람 맞추기
+            </button>
+          </>
+        )}
+        <div className="hint">이 설정은 폰마다 따로예요. 혈당을 재는 사람 폰에서 켜주세요.</div>
       </section>
 
       <section className="panel">

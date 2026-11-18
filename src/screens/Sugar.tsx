@@ -6,6 +6,7 @@ import { enablePush, pushState, PushState } from '../push';
 import { SLOT_LABEL, SLOTS, Slot, Sugar } from '../types';
 import { downloadIcs, hm, pad, remain, toTs, today, ymd } from '../util';
 import { DeleteButton, Field, Icon, Sheet, useToast } from '../ui';
+import { getAlarmMode, openPhoneAlarm, phoneAlarmSupported } from '../phoneAlarm';
 
 const TWO_H = 2 * 60 * 60 * 1000;
 const DEFAULT_MEAL: Record<Slot, string> = { fasting: '07:30', breakfast: '08:00', lunch: '12:30', dinner: '18:30' };
@@ -92,8 +93,16 @@ export default function SugarScreen() {
       ];
       const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
       if (nav.canShare?.({ files: [file] })) actions.push({ label: '사진첩 저장', run: async () => { await shareToAlbum(file); } });
-      if (!hasValue && measureAt > Date.now() && push !== 'on') actions.push({ label: '캘린더', run: async () => downloadIcs(`${SLOT_LABEL[slot]} 식후 2시간 혈당`, measureAt) });
+      const needAlarm = !hasValue && measureAt > Date.now();
+      const mode = getAlarmMode();
+      const phoneLabel = `체리 ${SLOT_LABEL[slot]} 혈당`;
+      if (needAlarm && mode !== 'off' && phoneAlarmSupported()) {
+        actions.push({ label: '폰 알람', run: async () => { openPhoneAlarm(measureAt, phoneLabel); } });
+      } else if (needAlarm && push !== 'on') {
+        actions.push({ label: '캘린더', run: async () => downloadIcs(`${SLOT_LABEL[slot]} 식후 2시간 혈당`, measureAt) });
+      }
       toast(hasValue ? '사진을 바꿨어요' : `저장 · ${hm(measureAt)} 알람`, actions, 7000);
+      if (needAlarm && mode === 'auto') setTimeout(() => openPhoneAlarm(measureAt, phoneLabel), 600);
     } catch (e: any) {
       toast(e?.message || '사진을 저장하지 못했어요');
     }
@@ -382,6 +391,11 @@ function EditSheet({ rec, targets, onClose }: { rec: Sugar | null; targets: { ta
           <Field label="측정 시간" htmlFor="sg-measure"><input id="sg-measure" className="fld" type="time" value={measureT} onChange={(e) => setMeasureT(e.target.value)} /></Field>
         </div>
         <Field label="메모 (선택)" htmlFor="sg-memo"><input id="sg-memo" className="fld" value={memo} onChange={(e) => setMemo(e.target.value)} /></Field>
+        {meal && num == null && measureT && toTs(rec.date, measureT) > Date.now() && getAlarmMode() !== 'off' && phoneAlarmSupported() && (
+          <button type="button" className="btn-ghost" onClick={() => openPhoneAlarm(toTs(rec.date, measureT), `체리 ${SLOT_LABEL[rec.slot]} 혈당`)}>
+            {measureT} 폰 알람 맞추기
+          </button>
+        )}
         <div className="actions">
           <DeleteButton
             onDelete={async () => {
