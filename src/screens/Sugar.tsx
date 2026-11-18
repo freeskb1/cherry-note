@@ -9,7 +9,6 @@ import { DeleteButton, Field, Icon, Sheet, useToast } from '../ui';
 import { getAlarmMode, openPhoneAlarm, phoneAlarmSupported } from '../phoneAlarm';
 
 const TWO_H = 2 * 60 * 60 * 1000;
-const DEFAULT_MEAL: Record<Slot, string> = { fasting: '07:30', breakfast: '08:00', lunch: '12:30', dinner: '18:30' };
 const sid = (date: string, slot: Slot) => `${date}_${slot}`;
 
 export default function SugarScreen() {
@@ -73,12 +72,14 @@ export default function SugarScreen() {
     try {
       const data = await compressImage(file);
       const photoId = await savePhoto(data);
-      const mealAt = prev?.mealAt || (sel === today() ? Date.now() : toTs(sel, DEFAULT_MEAL[slot]));
-      const measureAt = prev?.measureAt || mealAt + TWO_H;
+      // 오늘: 올린 시각 + 2시간 알람 / 지난 날짜: 시간 없이 사진만 저장
+      const isToday = sel === today();
+      const mealAt = prev?.mealAt ?? (isToday ? Date.now() : null);
+      const measureAt = prev?.measureAt ?? (mealAt ? mealAt + TWO_H : null);
       await save('sugar', id, { date: sel, slot, photoId, mealAt, measureAt, value: prev?.value ?? null });
       if (prev?.photoId) await removePhoto(prev.photoId);
       const hasValue = prev?.value != null;
-      if (!hasValue) await setAlarm(id, measureAt, `${SLOT_LABEL[slot]} 식후 2시간 혈당`, `${hm(measureAt)} 측정 시간이에요`);
+      if (!hasValue && measureAt) await setAlarm(id, measureAt, `${SLOT_LABEL[slot]} 식후 2시간 혈당`, `${hm(measureAt)} 측정 시간이에요`);
 
       const actions = [
         {
@@ -93,16 +94,16 @@ export default function SugarScreen() {
       ];
       const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
       if (nav.canShare?.({ files: [file] })) actions.push({ label: '사진첩 저장', run: async () => { await shareToAlbum(file); } });
-      const needAlarm = !hasValue && measureAt > Date.now();
+      const needAlarm = !hasValue && !!measureAt && measureAt > Date.now();
       const mode = getAlarmMode();
       const phoneLabel = `체리 ${SLOT_LABEL[slot]} 혈당`;
       if (needAlarm && mode !== 'off' && phoneAlarmSupported()) {
-        actions.push({ label: '폰 알람', run: async () => { openPhoneAlarm(measureAt, phoneLabel); } });
+        actions.push({ label: '폰 알람', run: async () => { openPhoneAlarm(measureAt!, phoneLabel); } });
       } else if (needAlarm && push !== 'on') {
-        actions.push({ label: '캘린더', run: async () => downloadIcs(`${SLOT_LABEL[slot]} 식후 2시간 혈당`, measureAt) });
+        actions.push({ label: '캘린더', run: async () => downloadIcs(`${SLOT_LABEL[slot]} 식후 2시간 혈당`, measureAt!) });
       }
-      toast(hasValue ? '사진을 바꿨어요' : `저장 · ${hm(measureAt)} 알람`, actions, 7000);
-      if (needAlarm && mode === 'auto') setTimeout(() => openPhoneAlarm(measureAt, phoneLabel), 600);
+      toast(hasValue ? '사진을 바꿨어요' : needAlarm ? `저장 · ${hm(measureAt)} 알람` : '사진을 저장했어요', actions, 7000);
+      if (needAlarm && mode === 'auto') setTimeout(() => openPhoneAlarm(measureAt!, phoneLabel), 600);
     } catch (e: any) {
       toast(e?.message || '사진을 저장하지 못했어요');
     }
@@ -127,7 +128,7 @@ export default function SugarScreen() {
         </div>
       );
     }
-    if (!r || !r.mealAt) {
+    if (!r || (!r.mealAt && !r.photoId)) {
       return (
         <div key={slot} className="slot dashed">
           <div className="slab">{label}</div>
@@ -141,18 +142,20 @@ export default function SugarScreen() {
     }
     if (r.value == null) {
       const due = r.measureAt || 0;
-      // 기다리는 중이거나 측정 시각이 막 지난 경우(3시간 이내)만 카운트다운을 보여줌
-      const live = due > now || now - due < 3 * 60 * 60 * 1000;
+      // 오늘 기록만 측정 시각과 남은 시간을 보여줌. 지난 날짜는 사진 + 입력만
+      const live = r.date === today() && !!due;
       return (
         <div key={slot} className={'slot' + (live ? ' active' : '')}>
           <div className="slab">{label}</div>
           <PhotoThumb id={r.photoId} onClick={() => setEditing(r)} />
           <button type="button" className="slot-info" onClick={() => setEditing(r)}>
-            <b>{hm(due)} 측정</b>
             {live ? (
-              <span className={due <= now ? 'late' : 'accent'}>{due <= now ? `${remain(due, now)} · 지금 재세요` : remain(due, now)}</span>
+              <>
+                <b>{hm(due)} 측정</b>
+                <span className={due <= now ? 'late' : 'accent'}>{due <= now ? `${remain(due, now)} · 지금 재세요` : remain(due, now)}</span>
+              </>
             ) : (
-              <small>{hm(r.mealAt)} 식사 · 수치 입력 전</small>
+              <small>수치 입력 전</small>
             )}
           </button>
           <button type="button" className="num go" onClick={() => setKeypad({ slot, date: sel })}>입력</button>
@@ -165,7 +168,7 @@ export default function SugarScreen() {
         <PhotoThumb id={r.photoId} />
         <div className="slot-info">
           <span className="val-line"><b className={isHigh(r) ? 'val hi' : 'val'}>{r.value}</b><Badge high={isHigh(r)} /></span>
-          <small>{hm(r.mealAt)} 식사 → {hm(r.measureAt)} 측정</small>
+          {r.mealAt && r.measureAt ? <small>{hm(r.mealAt)} 식사 → {hm(r.measureAt)} 측정</small> : null}
         </div>
         <Icon name="next" size={18} color="var(--muted-2)" />
       </button>
@@ -273,7 +276,7 @@ function Keypad({ target, current, targetValue, onClose }: { target: { slot: Slo
   const confirm = async () => {
     if (!v) return;
     const prev = current ? { ...current } : null;
-    const measureAt = current?.measureAt || (date === today() ? Date.now() : toTs(date, DEFAULT_MEAL[slot]));
+    const measureAt = current?.measureAt ?? (date === today() ? Date.now() : null);
     await save('sugar', id, { date, slot, value: num, measureAt });
     await cancelAlarm(id);
     onClose();
