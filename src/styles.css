@@ -325,3 +325,6 @@ select.fld { appearance: none; background-image: linear-gradient(45deg, transpar
 .confirm-body { font-size: 13px; color: var(--muted); }
 .confirm-actions { display: flex; gap: 8px; margin-top: 8px; }
 .btn-danger { min-height: 46px; border: none; border-radius: 12px; background: var(--danger); color: #fff; font-size: 15px; font-weight: 700; }
+
+.howto { background: var(--sunk); border-radius: 12px; padding: 12px 14px; font-size: 13px; line-height: 1.6; }
+.howto ol { margin: 6px 0 0; padding-left: 18px; }

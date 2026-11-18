@@ -4,7 +4,7 @@ import { cancelAlarm, remove, removePhoto, save, savePhoto, setAlarm, usePhoto, 
 import { compressImage, shareToAlbum } from '../image';
 import { enablePush, pushState, PushState } from '../push';
 import { SLOT_LABEL, SLOTS, Slot, Sugar } from '../types';
-import { downloadIcs, hm, pad, remain, toTs, today, ymd } from '../util';
+import { downloadIcs, hm, isIOS, pad, remain, toTs, today, ymd } from '../util';
 import { DeleteButton, Field, Icon, Sheet, useToast } from '../ui';
 import { getAlarmMode, openPhoneAlarm, phoneAlarmSupported } from '../phoneAlarm';
 
@@ -400,7 +400,7 @@ function EditSheet({ rec, targets, onClose }: { rec: Sugar | null; targets: { ta
           <Field label="측정 시간" htmlFor="sg-measure"><input id="sg-measure" className="fld" type="time" value={measureT} onChange={(e) => setMeasureT(e.target.value)} /></Field>
         </div>
         <Field label="메모 (선택)" htmlFor="sg-memo"><input id="sg-memo" className="fld" value={memo} onChange={(e) => setMemo(e.target.value)} /></Field>
-        {meal && num == null && measureT && toTs(rec.date, measureT) > Date.now() && getAlarmMode() !== 'off' && phoneAlarmSupported() && (
+        {meal && num == null && measureT && toTs(rec.date, measureT) > Date.now() && getAlarmMode() !== 'off' && phoneAlarmSupported() && !isIOS() && (
           <button type="button" className="btn-ghost" onClick={() => openPhoneAlarm(toTs(rec.date, measureT), `체리 ${SLOT_LABEL[rec.slot]} 혈당`)}>
             {measureT} 폰 알람 맞추기
           </button>

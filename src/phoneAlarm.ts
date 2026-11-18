@@ -56,7 +56,16 @@ export function phoneAlarmUrl(at: number, label: string): string | null {
   return null;
 }
 
-/** 시계 앱 알람 맞추기. 지난 시각이면 아무것도 안 함 */
+/** 단축어만 실행 (설정 화면 테스트용) */
+export function runShortcutTest(): boolean {
+  if (!isIOS()) return false;
+  window.location.href = `shortcuts://run-shortcut?name=${encodeURIComponent(SHORTCUT_NAME)}`;
+  return true;
+}
+
+/** 시계 앱 알람/타이머 맞추기. 지난 시각이면 아무것도 안 함
+ *  아이폰: 단축어 '체리알람'(타이머 시작 2시간)을 실행 → 사진 찍은 시각 + 2시간
+ *  안드로이드: 해당 시각에 알람 */
 export function openPhoneAlarm(at: number, label = '체리 혈당 측정'): boolean {
   if (at <= Date.now()) return false;
   const url = phoneAlarmUrl(at, label);
