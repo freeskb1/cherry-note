@@ -99,7 +99,7 @@ export default function SugarScreen() {
       const phoneLabel = `체리 ${SLOT_LABEL[slot]} 혈당`;
       if (needAlarm && mode !== 'off' && phoneAlarmSupported()) {
         actions.push({ label: '폰 알람', run: async () => { openPhoneAlarm(measureAt!, phoneLabel); } });
-      } else if (needAlarm && push !== 'on' && !phoneAlarmSupported()) {
+      } else if (needAlarm && push !== 'on') {
         actions.push({ label: '캘린더', run: async () => downloadIcs(`${SLOT_LABEL[slot]} 식후 2시간 혈당`, measureAt!) });
       }
       toast(hasValue ? '사진을 바꿨어요' : needAlarm ? `저장 · ${hm(measureAt)} 알람` : '사진을 저장했어요', actions, 7000);
@@ -160,7 +160,7 @@ export default function SugarScreen() {
           </button>
           {live && due > now && (getAlarmMode() !== 'off' && phoneAlarmSupported() ? (
             <button type="button" className="slot-bell" aria-label="폰 알람 다시 맞추기" onClick={() => openPhoneAlarm(due, `체리 ${label} 혈당`)}><Icon name="bell" size={20} /></button>
-          ) : push !== 'on' && !phoneAlarmSupported() ? (
+          ) : push !== 'on' ? (
             <button type="button" className="slot-bell" aria-label="캘린더에 알람 넣기" onClick={() => downloadIcs(`${label} 식후 2시간 혈당`, due)}><Icon name="bell" size={20} /></button>
           ) : null)}
           <button type="button" className="num go" onClick={() => setKeypad({ slot, date: sel })}>입력</button>
