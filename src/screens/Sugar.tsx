@@ -141,13 +141,19 @@ export default function SugarScreen() {
     }
     if (r.value == null) {
       const due = r.measureAt || 0;
+      // 기다리는 중이거나 측정 시각이 막 지난 경우(3시간 이내)만 카운트다운을 보여줌
+      const live = due > now || now - due < 3 * 60 * 60 * 1000;
       return (
-        <div key={slot} className="slot active">
+        <div key={slot} className={'slot' + (live ? ' active' : '')}>
           <div className="slab">{label}</div>
           <PhotoThumb id={r.photoId} onClick={() => setEditing(r)} />
           <button type="button" className="slot-info" onClick={() => setEditing(r)}>
             <b>{hm(due)} 측정</b>
-            <span className={due <= now ? 'late' : 'accent'}>{remain(due, now)}</span>
+            {live ? (
+              <span className={due <= now ? 'late' : 'accent'}>{due <= now ? `${remain(due, now)} · 지금 재세요` : remain(due, now)}</span>
+            ) : (
+              <small>{hm(r.mealAt)} 식사 · 수치 입력 전</small>
+            )}
           </button>
           <button type="button" className="num go" onClick={() => setKeypad({ slot, date: sel })}>입력</button>
         </div>
