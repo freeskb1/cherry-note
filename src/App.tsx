@@ -6,7 +6,7 @@ import {
   signInWithEmailAndPassword,
   User,
 } from 'firebase/auth';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, getDocFromServer, onSnapshot } from 'firebase/firestore';
 import { auth, db } from './firebase';
 import { autoLegacy, useCollection, useLists, useSettings, UserDoc } from './data';
 import { registerToken } from './push';
@@ -250,6 +250,37 @@ function NoFamily() {
   );
 }
 
+/** 불러오는 중 화면. 오래 걸리면(연결이 멈춘 경우) 한 번 자동 새로고침, 그래도 안 되면 다시 시도 버튼 */
+function Boot() {
+  const [stuck, setStuck] = useState(false);
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      let last = 0;
+      try {
+        last = Number(sessionStorage.getItem('cherry.bootReload') || 0);
+      } catch {
+        /* 무시 */
+      }
+      if (Date.now() - last > 60_000) {
+        try {
+          sessionStorage.setItem('cherry.bootReload', String(Date.now()));
+        } catch {
+          /* 무시 */
+        }
+        location.reload();
+      } else setStuck(true);
+    }, 9000);
+    return () => window.clearTimeout(t);
+  }, []);
+  return (
+    <div className="login boot">
+      <img src="/icon-192.png" alt="" width={56} height={56} />
+      <p className="sub">{stuck ? '연결이 늦어지고 있어요.' : '불러오는 중…'}</p>
+      {stuck && <button className="btn-primary" type="button" onClick={() => location.reload()}>다시 시도</button>}
+    </div>
+  );
+}
+
 /** 로그인한 사람의 가족을 찾아서 연결 */
 function Signed({ user }: { user: User }) {
   const [userDoc, setUserDoc] = useState<UserDoc | null | undefined>(undefined);
@@ -288,7 +319,30 @@ function Signed({ user }: { user: User }) {
     };
   }, [hid, userDoc, retry]);
 
-  if (userDoc === undefined || household === undefined) return <div className="boot" />;
+  // 로그인 직후 실시간 연결이 멈춰 첫 응답이 안 오는 경우가 있어서, 3초 뒤 서버에서 직접 한 번 읽어 채움
+  useEffect(() => {
+    if (userDoc !== undefined && household !== undefined) return;
+    const t = window.setTimeout(async () => {
+      try {
+        let u = userDoc;
+        if (u === undefined) {
+          const s = await getDocFromServer(doc(db, 'users', user.uid));
+          u = s.exists() ? (s.data() as UserDoc) : null;
+          setUserDoc((cur) => (cur === undefined ? u : cur));
+        }
+        const h = u?.householdId;
+        if (h) {
+          const s = await getDocFromServer(doc(db, 'households', h));
+          if (s.exists()) setHousehold((cur) => (cur === undefined ? ({ id: s.id, ...(s.data() as Omit<Household, 'id'>) } as Household) : cur));
+        }
+      } catch {
+        /* 실시간 연결이나 Boot의 자동 새로고침이 이어서 처리 */
+      }
+    }, 3000);
+    return () => window.clearTimeout(t);
+  }, [user.uid, userDoc, household]);
+
+  if (userDoc === undefined || household === undefined) return <Boot />;
   if (!household) return <NoFamily />;
 
   session.hid = household.id;
@@ -310,6 +364,6 @@ export default function App() {
       }),
     []
   );
-  if (user === undefined) return <div className="boot" />;
+  if (user === undefined) return <Boot />;
   return <ToastProvider>{user ? <Signed key={user.uid} user={user} /> : <AuthScreen />}</ToastProvider>;
 }
