@@ -66,7 +66,11 @@ export function openPhoneAlarm(at: number, label = '혈당 측정'): boolean {
 
 /** 설정 화면 테스트: 1분 뒤 */
 export function testPhoneAlarm(): boolean {
-  return openPhoneAlarm(Date.now() + 60_000 + 1000, '알람 테스트');
+  if (isIOS()) {
+    window.location.href = shortcutUrl(1);
+    return true;
+  }
+  return openPhoneAlarm(Date.now() + 60_000, '알람 테스트');
 }
 
 const SETUP_KEY = 'cherry.shortcutReady';

@@ -78,7 +78,10 @@ a { color: var(--info); }
 h1 { font-size: 22px; margin: 0; font-weight: 700; }
 .boot { min-height: 100vh; background: var(--bg); }
 
-.screen { max-width: 560px; margin: 0 auto; padding-bottom: calc(84px + env(safe-area-inset-bottom)); }
+.app { height: 100vh; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+html:has(.app), html:has(.app) body { height: 100%; overflow: hidden; overscroll-behavior: none; }
+.screen { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; padding-bottom: 24px; }
+.screen > .page { max-width: 560px; margin: 0 auto; }
 .page {
   padding: calc(16px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 24px max(16px, env(safe-area-inset-left));
   display: flex; flex-direction: column; gap: 12px;
@@ -95,7 +98,7 @@ h1 { font-size: 22px; margin: 0; font-weight: 700; }
 
 /* 하단 탭 */
 .nav {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+  position: relative; flex: none; z-index: 20;
   display: flex; justify-content: center; background: var(--card); border-top: 1px solid var(--line);
   padding: 0 max(8px, env(safe-area-inset-right)) env(safe-area-inset-bottom) max(8px, env(safe-area-inset-left));
 }

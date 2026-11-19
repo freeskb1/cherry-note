@@ -157,7 +157,7 @@ function Main({ household }: { household: Household }) {
     const on = () => {
       captureInviteFromHash();
       setRoute(parseHash());
-      window.scrollTo(0, 0);
+      document.querySelector('.screen')?.scrollTo(0, 0);
     };
     window.addEventListener('hashchange', on);
     return () => window.removeEventListener('hashchange', on);
@@ -185,6 +185,7 @@ function Main({ household }: { household: Household }) {
 
   return (
     <StoreCtx.Provider value={store}>
+      <div className="app">
       <main className="screen">
         {route.tab === 'home' && <Home />}
         {route.tab === 'shop' && <Shop />}
@@ -201,6 +202,7 @@ function Main({ household }: { household: Household }) {
           </a>
         ))}
       </nav>
+      </div>
       <WelcomeInvite />
     </StoreCtx.Provider>
   );
