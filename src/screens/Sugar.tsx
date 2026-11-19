@@ -24,6 +24,13 @@ export default function SugarScreen() {
   const [keypad, setKeypad] = useState<{ slot: Slot; date: string } | null>(null);
   const [editing, setEditing] = useState<Sugar | null>(null);
   const [alarmFor, setAlarmFor] = useState<{ slot: Slot; due: number } | null>(null);
+  const [shot, setShot] = useState<{
+    slot: Slot;
+    measureAt: number;
+    undo: () => Promise<void>;
+    album: (() => Promise<boolean>) | null;
+    done: { cal?: boolean; phone?: boolean; album?: boolean };
+  } | null>(null);
   const [push, setPush] = useState<PushState>('on');
   const camRef = useRef<HTMLInputElement>(null);
   const albumRef = useRef<HTMLInputElement>(null);
@@ -107,27 +114,25 @@ export default function SugarScreen() {
       const hasValue = prev?.value != null;
       if (!hasValue && measureAt) await setAlarm(id, measureAt, postTitle(slot, postMin), `${hm(measureAt)} 측정 시간이에요`);
 
-      const actions = [
-        {
-          label: '되돌리기',
-          run: async () => {
-            await removePhoto(photoId);
-            await cancelAlarm(id);
-            if (prev) await save('sugar', id, { ...prev });
-            else await remove('sugar', id);
-          },
-        },
-      ];
+      const undo = async () => {
+        await removePhoto(photoId);
+        await cancelAlarm(id);
+        if (prev) await save('sugar', id, { ...prev });
+        else await remove('sugar', id);
+      };
       const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
-      if (nav.canShare?.({ files: [file] })) actions.push({ label: '사진첩 저장', run: async () => { await shareToAlbum(file); } });
+      const canAlbum = !!nav.canShare?.({ files: [file] });
       const needAlarm = !hasValue && !!measureAt && measureAt > Date.now();
       const mode = getAlarmMode();
-      const phoneLabel = `${SLOT_LABEL[slot]} 혈당 측정`;
-      // 캘린더·폰 알람 둘 다 고를 수 있게
-      if (needAlarm) actions.push({ label: '캘린더', run: async () => addToCalendar(postTitle(slot, postMin), measureAt!) });
-      if (needAlarm && phoneAlarmSupported() && mode !== 'auto') actions.push({ label: '폰 알람', run: async () => { openPhoneAlarm(measureAt!, phoneLabel); } });
-      toast(hasValue ? '사진을 바꿨어요' : needAlarm ? `저장 · ${hm(measureAt)} 측정` : '사진을 저장했어요', actions, 9000);
-      if (needAlarm && mode === 'auto') setTimeout(() => openPhoneAlarm(measureAt!, phoneLabel), 600);
+      if (needAlarm) {
+        // 알람을 맞춰야 할 때: 캘린더·폰 알람을 크게 보여주는 패널 (닫을 때까지 유지)
+        setShot({ slot, measureAt: measureAt!, undo, album: canAlbum ? () => shareToAlbum(file) : null, done: {} });
+        if (mode === 'auto' && phoneAlarmSupported()) setTimeout(() => openPhoneAlarm(measureAt!, `${SLOT_LABEL[slot]} 혈당 측정`), 600);
+      } else {
+        const actions = [{ label: '되돌리기', run: undo }];
+        if (canAlbum) actions.push({ label: '사진첩 저장', run: async () => { await shareToAlbum(file); } });
+        toast(hasValue ? '사진을 바꿨어요' : '사진을 저장했어요', actions, 7000);
+      }
     } catch (e: any) {
       toast(e?.message || '사진을 저장하지 못했어요');
     }
@@ -268,6 +273,31 @@ export default function SugarScreen() {
         onClose={() => setKeypad(null)}
       />
       <EditSheet rec={editing} settings={settings} onClose={() => setEditing(null)} />
+      {shot && (
+        <div className="shot-panel" role="dialog" aria-label="측정 알람 맞추기">
+          <div className="shot-head">
+            <Icon name="check" size={18} stroke={2.4} color="var(--toast-ok)" />
+            <span className="grow"><b>저장했어요</b> · {SLOT_LABEL[shot.slot]} {hm(shot.measureAt)} 측정</span>
+            <button type="button" className="shot-x" aria-label="닫기" onClick={() => setShot(null)}><Icon name="x" size={20} stroke={2.2} /></button>
+          </div>
+          <div className="shot-main">
+            <button type="button" className={'shot-btn' + (shot.done.cal ? ' done' : '')} onClick={() => { addToCalendar(postTitle(shot.slot, postMin), shot.measureAt); setShot({ ...shot, done: { ...shot.done, cal: true } }); }}>
+              <Icon name="clock" size={22} />{shot.done.cal ? '캘린더 ✓' : '캘린더에 추가'}
+            </button>
+            {phoneAlarmSupported() && (
+              <button type="button" className={'shot-btn' + (shot.done.phone ? ' done' : '')} onClick={() => { openPhoneAlarm(shot.measureAt, `${SLOT_LABEL[shot.slot]} 혈당 측정`); setShot({ ...shot, done: { ...shot.done, phone: true } }); }}>
+                <Icon name="bell" size={22} />{shot.done.phone ? '폰 알람 ✓' : '폰 알람'}
+              </button>
+            )}
+          </div>
+          <div className="shot-sub">
+            <button type="button" className="shot-link" onClick={async () => { const u = shot.undo; setShot(null); await u(); toast('되돌렸어요'); }}>되돌리기</button>
+            {shot.album && (
+              <button type="button" className="shot-link" onClick={async () => { await shot.album!(); setShot({ ...shot, done: { ...shot.done, album: true } }); }}>{shot.done.album ? '사진첩 저장 ✓' : '사진첩 저장'}</button>
+            )}
+          </div>
+        </div>
+      )}
       {alarmFor && (
         <Sheet open onClose={() => setAlarmFor(null)}>
           <div className="sheet-head">
