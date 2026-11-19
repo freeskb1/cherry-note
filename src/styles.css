@@ -377,3 +377,6 @@ select.fld { appearance: none; background-image: linear-gradient(45deg, transpar
 .admin-panel { border-color: var(--star-line); }
 .warn-label { color: var(--warn-fg); font-weight: 700; }
 .family-item { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: 10px; background: var(--sunk); }
+.toast { flex-wrap: wrap; }
+.toast-text { flex-basis: 140px; }
+.howto .btn-ghost { margin-top: 8px; width: 100%; }

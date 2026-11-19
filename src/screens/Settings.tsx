@@ -7,7 +7,8 @@ import { AdminFamiliesPanel, FamilyPanel } from './Family';
 import { saveSettings } from '../data';
 import { enablePush, pushState, PushState, testLocalNotification } from '../push';
 import { Field, Icon, Seg, useToast } from '../ui';
-import { AlarmMode, getAlarmMode, openPhoneAlarm, phoneAlarmSupported, runShortcutTest, setAlarmMode, SHORTCUT_NAME } from '../phoneAlarm';
+import { AlarmMode, getAlarmMode, phoneAlarmSupported, setAlarmMode } from '../phoneAlarm';
+import { ShortcutHowto } from './ShortcutHowto';
 import { durLabel, isIOS } from '../util';
 import { POST_MEAL_OPTIONS } from '../types';
 
@@ -114,41 +115,19 @@ export default function SettingsScreen() {
 
       <section className="panel">
         <div className="t">폰 알람 (무음에서도 울림)</div>
-        <div className="muted small">
-          {phoneAlarmSupported()
-            ? isIOS()
-              ? `식사 사진을 찍으면 아이폰 2시간 타이머가 자동으로 시작돼요. 처음 한 번 단축어 '${SHORTCUT_NAME}'를 만들어야 해요.`
-              : '시계 앱에 알람을 맞춰요. 기종에 따라 동작하지 않을 수 있어요.'
-            : '아이폰·안드로이드 폰에서만 쓸 수 있어요.'}
-        </div>
+        <div className="muted small">식사 사진을 올리면 '캘린더'와 '폰 알람' 버튼이 같이 나와요. 원하는 걸 누르면 돼요.</div>
         {phoneAlarmSupported() && (
-          <>
-            <Seg
-              items={[
-                { key: 'off', label: '안 씀' },
-                { key: 'button', label: '버튼으로' },
-                { key: 'auto', label: '사진 찍으면 자동' },
-              ]}
-              value={alarmMode}
-              onChange={(m) => { setAlarmModeState(m); setAlarmMode(m); }}
-            />
-            <button type="button" className="btn-ghost" onClick={() => { const ok = isIOS() ? runShortcutTest() : openPhoneAlarm(Date.now() + 2 * 60000, '알람 테스트'); if (!ok) toast('이 폰에서는 열 수 없어요'); }}>
-              {isIOS() ? '테스트: 단축어 실행해보기' : '테스트: 2분 뒤 알람 맞추기'}
-            </button>
-            {isIOS() && (
-              <div className="howto">
-                <b>단축어 만들기 (처음 한 번, 30초)</b>
-                <ol>
-                  <li>단축어 앱 → 오른쪽 위 <b>+</b></li>
-                  <li>맨 위 이름을 <b>{SHORTCUT_NAME}</b> 로 바꾸기 (띄어쓰기 없이)</li>
-                  <li>검색창에 <b>타이머</b> → <b>타이머 시작</b> → 시간을 <b>2시간</b>으로</li>
-                  <li><b>완료</b> → 위 테스트 버튼 눌러서 시계 앱 타이머가 시작되면 성공 (테스트 후 타이머는 취소)</li>
-                </ol>
-              </div>
-            )}
-          </>
+          <Seg
+            items={[
+              { key: 'button', label: '버튼 눌러서 (기본)' },
+              { key: 'auto', label: '사진 찍으면 자동' },
+            ]}
+            value={alarmMode}
+            onChange={(m) => { setAlarmModeState(m); setAlarmMode(m); }}
+          />
         )}
-        <div className="hint">이 설정은 폰마다 따로예요. 혈당을 재는 사람 폰에서 켜주세요.</div>
+        <ShortcutHowto />
+        <div className="hint">이 설정은 폰마다 따로예요. '자동'은 단축어를 만든 폰에서만 켜주세요.</div>
       </section>
 
       <section className="panel">

@@ -7,6 +7,7 @@ import { isNumOnly, SLOT_LABEL, SLOTS, Settings, Slot, Sugar } from '../types';
 import { downloadIcs, durLabel, hm, isIOS, pad, remain, toTs, today, ymd } from '../util';
 import { DeleteButton, Field, Icon, PhotoViewer, Sheet, useToast } from '../ui';
 import { getAlarmMode, openPhoneAlarm, phoneAlarmSupported } from '../phoneAlarm';
+import { ShortcutHowto } from './ShortcutHowto';
 
 const sid = (date: string, slot: Slot) => `${date}_${slot}`;
 const targetOf = (st: Settings, slot: Slot) =>
@@ -22,6 +23,7 @@ export default function SugarScreen() {
   const [now, setNow] = useState(Date.now());
   const [keypad, setKeypad] = useState<{ slot: Slot; date: string } | null>(null);
   const [editing, setEditing] = useState<Sugar | null>(null);
+  const [alarmFor, setAlarmFor] = useState<{ slot: Slot; due: number } | null>(null);
   const [push, setPush] = useState<PushState>('on');
   const camRef = useRef<HTMLInputElement>(null);
   const albumRef = useRef<HTMLInputElement>(null);
@@ -100,12 +102,10 @@ export default function SugarScreen() {
       const needAlarm = !hasValue && !!measureAt && measureAt > Date.now();
       const mode = getAlarmMode();
       const phoneLabel = `${SLOT_LABEL[slot]} 혈당 측정`;
-      if (needAlarm && mode !== 'off' && phoneAlarmSupported()) {
-        actions.push({ label: '폰 알람', run: async () => { openPhoneAlarm(measureAt!, phoneLabel); } });
-      } else if (needAlarm && push !== 'on') {
-        actions.push({ label: '캘린더', run: async () => downloadIcs(postTitle(slot, postMin), measureAt!) });
-      }
-      toast(hasValue ? '사진을 바꿨어요' : needAlarm ? `저장 · ${hm(measureAt)} 알람` : '사진을 저장했어요', actions, 7000);
+      // 캘린더·폰 알람 둘 다 고를 수 있게
+      if (needAlarm) actions.push({ label: '캘린더', run: async () => downloadIcs(postTitle(slot, postMin), measureAt!) });
+      if (needAlarm && phoneAlarmSupported() && mode !== 'auto') actions.push({ label: '폰 알람', run: async () => { openPhoneAlarm(measureAt!, phoneLabel); } });
+      toast(hasValue ? '사진을 바꿨어요' : needAlarm ? `저장 · ${hm(measureAt)} 측정` : '사진을 저장했어요', actions, 9000);
       if (needAlarm && mode === 'auto') setTimeout(() => openPhoneAlarm(measureAt!, phoneLabel), 600);
     } catch (e: any) {
       toast(e?.message || '사진을 저장하지 못했어요');
@@ -161,11 +161,9 @@ export default function SugarScreen() {
               <small>수치 입력 전</small>
             )}
           </button>
-          {live && due > now && (getAlarmMode() !== 'off' && phoneAlarmSupported() ? (
-            <button type="button" className="slot-bell" aria-label="폰 알람 다시 맞추기" onClick={() => openPhoneAlarm(due, `${label} 혈당 측정`)}><Icon name="bell" size={20} /></button>
-          ) : push !== 'on' ? (
-            <button type="button" className="slot-bell" aria-label="캘린더에 알람 넣기" onClick={() => downloadIcs(postTitle(slot, postMin), due)}><Icon name="bell" size={20} /></button>
-          ) : null)}
+          {live && due > now && (
+            <button type="button" className="slot-bell" aria-label="알람 맞추기" onClick={() => setAlarmFor({ slot, due })}><Icon name="bell" size={20} /></button>
+          )}
           <button type="button" className="num go" onClick={() => setKeypad({ slot, date: sel })}>입력</button>
         </div>
       );
@@ -249,6 +247,19 @@ export default function SugarScreen() {
         onClose={() => setKeypad(null)}
       />
       <EditSheet rec={editing} settings={settings} onClose={() => setEditing(null)} />
+      {alarmFor && (
+        <Sheet open onClose={() => setAlarmFor(null)}>
+          <div className="sheet-head">
+            <div className="sheet-title">{SLOT_LABEL[alarmFor.slot]} 측정 알람</div>
+            <div className="muted">{hm(alarmFor.due)} · {remain(alarmFor.due)}</div>
+          </div>
+          <button type="button" className="btn-primary" onClick={() => { downloadIcs(postTitle(alarmFor.slot, postMin), alarmFor.due); setAlarmFor(null); }}>캘린더에 추가</button>
+          {phoneAlarmSupported() && (
+            <button type="button" className="btn-ghost" onClick={() => { openPhoneAlarm(alarmFor.due, `${SLOT_LABEL[alarmFor.slot]} 혈당 측정`); setAlarmFor(null); }}>폰 알람 (단축어)</button>
+          )}
+          <ShortcutHowto collapsible />
+        </Sheet>
+      )}
     </div>
   );
 }
@@ -412,7 +423,7 @@ function EditSheet({ rec, settings, onClose }: { rec: Sugar | null; settings: Se
           <Field label="측정 시간" htmlFor="sg-measure"><input id="sg-measure" className="fld" type="time" value={measureT} onChange={(e) => setMeasureT(e.target.value)} /></Field>
         </div>
         <Field label="메모 (선택)" htmlFor="sg-memo"><input id="sg-memo" className="fld" value={memo} onChange={(e) => setMemo(e.target.value)} /></Field>
-        {meal && num == null && measureT && toTs(rec.date, measureT) > Date.now() && getAlarmMode() !== 'off' && phoneAlarmSupported() && !isIOS() && (
+        {meal && num == null && measureT && toTs(rec.date, measureT) > Date.now() && phoneAlarmSupported() && (
           <button type="button" className="btn-ghost" onClick={() => openPhoneAlarm(toTs(rec.date, measureT), `${SLOT_LABEL[rec.slot]} 혈당 측정`)}>
             {measureT} 폰 알람 맞추기
           </button>
