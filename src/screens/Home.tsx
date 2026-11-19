@@ -20,7 +20,7 @@ export default function Home() {
   const baby = settings.babyName || '아기';
   const sugar = useSugarMonth(today().slice(0, 7));
   const pending = sugar
-    .filter((s) => s.date === today() && s.slot !== 'fasting' && s.mealAt && (s.value === null || s.value === undefined))
+    .filter((s) => s.date === today() && s.slot !== 'fasting' && s.slot !== 'bedtime' && s.mealAt && (s.value === null || s.value === undefined))
     .sort((a, b) => (a.measureAt || 0) - (b.measureAt || 0))[0];
   const fasting = sugar.find((s) => s.date === today() && s.slot === 'fasting');
 

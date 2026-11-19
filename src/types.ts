@@ -54,9 +54,12 @@ export interface Note extends Meta {
   photoIds?: string[];
 }
 
-export type Slot = 'fasting' | 'breakfast' | 'lunch' | 'dinner';
-export const SLOTS: Slot[] = ['fasting', 'breakfast', 'lunch', 'dinner'];
-export const SLOT_LABEL: Record<Slot, string> = { fasting: '공복', breakfast: '아침', lunch: '점심', dinner: '저녁' };
+export type Slot = 'fasting' | 'breakfast' | 'lunch' | 'dinner' | 'bedtime';
+export const SLOTS: Slot[] = ['fasting', 'breakfast', 'lunch', 'dinner', 'bedtime'];
+export const SLOT_LABEL: Record<Slot, string> = { fasting: '공복', breakfast: '아침', lunch: '점심', dinner: '저녁', bedtime: '자기 전' };
+/** 사진 없이 숫자만 입력하는 칸 */
+export const isNumOnly = (s: Slot) => s === 'fasting' || s === 'bedtime';
+export const POST_MEAL_OPTIONS = [30, 60, 90, 120];
 
 export interface Sugar {
   id: string;
@@ -76,6 +79,9 @@ export interface Settings {
   dueDate: string;
   targetFasting: number;
   targetPost: number;
+  targetBedtime: number;
+  postMealMin: number;
+  bedtime: boolean;
   starMax: number;
   lastBackupAt?: number | null;
 }
@@ -85,6 +91,9 @@ export const DEFAULT_SETTINGS: Settings = {
   dueDate: '',
   targetFasting: 95,
   targetPost: 120,
+  targetBedtime: 120,
+  postMealMin: 120,
+  bedtime: false,
   starMax: 6,
   lastBackupAt: null,
 };
@@ -98,6 +107,8 @@ export interface Household {
   id: string;
   members: string[];
   names: Record<string, string>;
+  emails?: Record<string, string>;
+  code?: string;
   createdAt?: number;
   createdBy?: string;
 }

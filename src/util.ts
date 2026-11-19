@@ -105,3 +105,10 @@ export function downloadIcs(title: string, at: number) {
   ].join('\r\n');
   downloadBlob(new Blob([ics], { type: 'text/calendar' }), 'cherry-alarm.ics');
 }
+
+/** 30 → '30분', 90 → '1시간 30분' */
+export function durLabel(min: number): string {
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return [h ? `${h}시간` : '', m ? `${m}분` : ''].filter(Boolean).join(' ') || '0분';
+}

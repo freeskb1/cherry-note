@@ -1,4 +1,4 @@
-// 체리 준비노트 서비스워커: 푸시 알림 표시 + 알림 누르면 앱 열기
+// 출산 준비노트 서비스워커: 푸시 알림 표시 + 알림 누르면 앱 열기
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
 

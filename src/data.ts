@@ -152,28 +152,7 @@ export async function cancelAlarm(id: string) {
   await deleteDoc(doc(db, 'alarms', alarmId(id))).catch(() => {});
 }
 
-/** 처음 한 번만: 기본 체크리스트를 넣어둔다 (부부 폰이 동시에 열어도 한 번만) */
-export async function seedOnce() {
-  const flag = doc(db, hp('meta/seed'));
-  const first = await runTransaction(db, async (tx) => {
-    const s = await tx.get(flag);
-    if (s.exists()) return false;
-    tx.set(flag, { at: Date.now(), by: me() });
-    return true;
-  });
-  if (!first) return;
-  const now = Date.now();
-  const batch = writeBatch(db);
-  seed.items.forEach((it) => batch.set(doc(collection(db, hp('items'))), { ...it, star: false, createdAt: now, updatedAt: now, updatedBy: '' }));
-  seed.admin.forEach((it) => batch.set(doc(collection(db, hp('admin'))), { ...it, star: false, createdAt: now, updatedAt: now, updatedBy: '' }));
-  batch.set(doc(db, hp('meta/lists')), { shopCategories: seed.shopCategories, noteTags: seed.noteTags }, { merge: true });
-  // 태명·예정일은 가입할 때 따로 저장하므로 덮어쓰지 않음
-  const { babyName: _b, dueDate: _d, ...rest } = DEFAULT_SETTINGS;
-  batch.set(doc(db, hp('meta/settings')), rest, { merge: true });
-  await batch.commit();
-}
-
-/* ───────────── 계정 · 집 ───────────── */
+/* ───────────── 계정 · 가족 ───────────── */
 
 export interface UserDoc {
   householdId?: string;
@@ -186,80 +165,68 @@ function uid(): string {
   if (!u) throw new Error('로그인이 필요해요');
   return u.uid;
 }
+const myEmail = () => auth.currentUser?.email || '';
 
-/** 가입 코드 확인: 있고 아직 안 쓴 코드인지 */
-export async function checkSignupCode(code: string): Promise<boolean> {
-  const snap = await getDoc(doc(db, 'signupCodes', code));
-  return snap.exists() && snap.get('usedBy') == null;
-}
-
-/** 새 집 만들기. code가 없으면(기존 사용자 이전용) 가입 코드 없이 */
-export async function createHousehold(name: string, code: string | null, opts: { linkUser: boolean }): Promise<string> {
+/** 새 가족 만들기 + 영구 가족 코드(6자리). hid를 넘기면 그 id로 만듦 */
+export async function createHousehold(name: string, fixedHid?: string): Promise<{ hid: string; code: string }> {
   const u = uid();
-  const hid = newId();
-  const now = Date.now();
-  const batch = writeBatch(db);
-  batch.set(doc(db, 'households', hid), { members: [u], names: { [u]: name }, createdAt: now, createdBy: u, signupCode: code });
-  if (code) {
-    batch.update(doc(db, 'signupCodes', code), { usedBy: u, usedAt: now, householdId: hid, usedEmail: auth.currentUser?.email || '' });
+  const hid = fixedHid || newId();
+  for (let i = 0; i < 6; i++) {
+    const code = randomCode(6);
+    const invRef = doc(db, 'invites', code);
+    const ok = await runTransaction(db, async (tx) => {
+      const s = await tx.get(invRef);
+      if (s.exists()) return false;
+      tx.set(doc(db, 'households', hid), {
+        members: [u],
+        names: { [u]: name },
+        emails: { [u]: myEmail() },
+        code,
+        createdAt: Date.now(),
+        createdBy: u,
+      });
+      tx.set(invRef, { householdId: hid, createdBy: u, createdAt: Date.now() });
+      return true;
+    });
+    if (ok) return { hid, code };
   }
-  if (opts.linkUser) batch.set(doc(db, 'users', u), { householdId: hid, name, email: auth.currentUser?.email || '' }, { merge: true });
-  await batch.commit();
-  return hid;
+  throw new Error('가족 코드를 만들지 못했어요. 다시 시도해 주세요.');
 }
 
 export async function linkUser(hid: string, name: string) {
-  await setDoc(doc(db, 'users', uid()), { householdId: hid, name, email: auth.currentUser?.email || '' }, { merge: true });
+  await setDoc(doc(db, 'users', uid()), { householdId: hid, name, email: myEmail() }, { merge: true });
 }
 
-/** 초대 코드로 배우자 집에 들어가기 */
+/** 가족 코드로 배우자 가족에 들어가기 */
 export async function joinHousehold(code: string, name: string): Promise<string> {
   const u = uid();
   const inv = await getDoc(doc(db, 'invites', code));
-  if (!inv.exists()) throw new Error('초대 코드를 찾을 수 없어요. 다시 확인해 주세요.');
-  if ((inv.get('expiresAt') as number) < Date.now()) throw new Error('만료된 초대 코드예요. 새 초대 링크를 받아주세요.');
+  if (!inv.exists()) throw new Error('가족 코드를 찾을 수 없어요. 다시 확인해 주세요.');
   const hid = inv.get('householdId') as string;
   const batch = writeBatch(db);
-  batch.update(doc(db, 'households', hid), { members: arrayUnion(u), [`names.${u}`]: name, joinedVia: code });
-  batch.set(doc(db, 'users', u), { householdId: hid, name, email: auth.currentUser?.email || '' }, { merge: true });
+  batch.update(doc(db, 'households', hid), {
+    members: arrayUnion(u),
+    [`names.${u}`]: name,
+    [`emails.${u}`]: myEmail(),
+    joinedVia: code,
+  });
+  batch.set(doc(db, 'users', u), { householdId: hid, name, email: myEmail() }, { merge: true });
   try {
     await batch.commit();
   } catch (e: any) {
-    if (String(e?.code || '').includes('permission')) throw new Error('이미 두 명이 들어가 있거나, 쓸 수 없는 초대 코드예요.');
+    if (String(e?.code || '').includes('permission')) throw new Error('이미 두 명이 모두 들어간 가족이에요.');
     throw e;
   }
-  await deleteDoc(doc(db, 'invites', code)).catch(() => {});
   return hid;
 }
 
-/** 배우자 초대 코드 만들기 (72시간 유효) */
-export async function createInvite(): Promise<{ code: string; expiresAt: number }> {
-  const expiresAt = Date.now() + 72 * 3600 * 1000;
-  for (let i = 0; i < 5; i++) {
-    const code = randomCode(6);
-    const ref = doc(db, 'invites', code);
-    const ok = await runTransaction(db, async (tx) => {
-      const s = await tx.get(ref);
-      if (s.exists()) return false;
-      tx.set(ref, { householdId: session.hid, createdBy: session.uid, createdAt: Date.now(), expiresAt });
-      return true;
-    });
-    if (ok) {
-      await setDoc(doc(db, hp('meta/invite')), { code, expiresAt });
-      return { code, expiresAt };
-    }
+/** 가족 코드 미리보기 (초대 링크로 들어왔을 때 '누가 초대했는지') — 들어가기 전엔 이름을 볼 수 없어 코드만 확인 */
+export async function checkFamilyCode(code: string): Promise<boolean> {
+  try {
+    return (await getDoc(doc(db, 'invites', code))).exists();
+  } catch {
+    return false;
   }
-  throw new Error('초대 코드를 만들지 못했어요. 다시 시도해 주세요.');
-}
-
-export async function myInvites(): Promise<{ code: string; expiresAt: number }[]> {
-  const s = await getDoc(doc(db, hp('meta/invite')));
-  if (!s.exists()) return [];
-  const inv = { code: s.get('code') as string, expiresAt: s.get('expiresAt') as number };
-  if (inv.expiresAt <= Date.now()) return [];
-  // 이미 쓰인(배우자가 들어온) 코드는 지워져 있음
-  const live = await getDoc(doc(db, 'invites', inv.code));
-  return live.exists() ? [inv] : [];
 }
 
 export async function renameMe(name: string) {
@@ -268,88 +235,140 @@ export async function renameMe(name: string) {
   await setDoc(doc(db, 'users', u), { name }, { merge: true });
 }
 
-/* ───────────── 관리자: 가입 코드 ───────────── */
+/* ───────────── 기본 데이터 (용품·신청 목록, 상태·메모 제외) ───────────── */
 
-export interface SignupCode {
-  code: string;
-  createdAt: number;
-  memo?: string;
-  usedBy?: string | null;
-  usedEmail?: string;
-  usedAt?: number;
+type SeedItem = (typeof seed.items)[number];
+type SeedAdmin = (typeof seed.admin)[number];
+interface Template {
+  items: Partial<SeedItem>[];
+  admin: Partial<SeedAdmin>[];
+  shopCategories: string[];
 }
 
-export async function listSignupCodes(): Promise<SignupCode[] | null> {
+async function loadTemplate(): Promise<Template> {
   try {
-    const snap = await getDocs(collection(db, 'signupCodes'));
-    return snap.docs
-      .map((d) => ({ code: d.id, ...(d.data() as Omit<SignupCode, 'code'>) }))
-      .sort((a, b) => b.createdAt - a.createdAt);
+    const s = await getDoc(doc(db, 'templates/default'));
+    if (s.exists()) return s.data() as Template;
+  } catch {
+    /* 없으면 기본 엑셀 목록 */
+  }
+  return { items: seed.items, admin: seed.admin, shopCategories: seed.shopCategories };
+}
+
+/** 새 가족에 기본 데이터 넣기: 품목·카테고리·수량·우선순위만, 상태는 '살 것'/'할 일' */
+export async function applyTemplate(hid: string) {
+  const t = await loadTemplate();
+  const now = Date.now();
+  const base = `households/${hid}`;
+  const batch = writeBatch(db);
+  t.items.forEach((it, i) =>
+    batch.set(doc(collection(db, `${base}/items`)), {
+      name: it.name || '',
+      category: it.category || '기타',
+      sub: it.sub || '',
+      qty: it.qty || '',
+      priority: it.priority || '권장',
+      status: 'todo',
+      star: false,
+      order: it.order ?? i + 1,
+      createdAt: now,
+      updatedAt: now,
+      updatedBy: '',
+    })
+  );
+  t.admin.forEach((it, i) =>
+    batch.set(doc(collection(db, `${base}/admin`)), {
+      title: it.title || '',
+      period: it.period || 'before',
+      place: it.place || '',
+      priority: it.priority || '',
+      status: 'todo',
+      star: false,
+      order: it.order ?? i + 1,
+      createdAt: now,
+      updatedAt: now,
+      updatedBy: '',
+    })
+  );
+  batch.set(doc(db, `${base}/meta/lists`), { shopCategories: t.shopCategories?.length ? t.shopCategories : seed.shopCategories, noteTags: seed.noteTags }, { merge: true });
+  await batch.commit();
+}
+
+/** 관리자: 우리 가족의 지금 용품·신청 목록을 다른 가족용 기본 데이터로 저장 (상태·메모·가격·구매처·담당 제외) */
+export async function saveTemplateFromMyFamily(): Promise<{ items: number; admin: number }> {
+  const [items, admin, lists] = await Promise.all([
+    getDocs(collection(db, hp('items'))),
+    getDocs(collection(db, hp('admin'))),
+    getDoc(doc(db, hp('meta/lists'))),
+  ]);
+  const order = (d: { get: (k: string) => unknown }) => Number(d.get('order') ?? 9e15);
+  const t: Template = {
+    items: items.docs
+      .sort((a, b) => order(a) - order(b))
+      .map((d, i) => ({ name: d.get('name'), category: d.get('category'), sub: d.get('sub') || '', qty: d.get('qty') || '', priority: d.get('priority') || '권장', order: i + 1 })),
+    admin: admin.docs
+      .sort((a, b) => order(a) - order(b))
+      .map((d, i) => ({ title: d.get('title'), period: d.get('period'), place: d.get('place') || '', priority: d.get('priority') || '', order: i + 1 })),
+    shopCategories: (lists.get('shopCategories') as string[]) || seed.shopCategories,
+  };
+  await setDoc(doc(db, 'templates/default'), { ...t, updatedAt: Date.now() });
+  return { items: t.items.length, admin: t.admin.length };
+}
+
+/* ───────────── 관리자: 사용 중인 가족 ───────────── */
+
+export interface FamilyRow {
+  id: string;
+  code: string;
+  babyName: string;
+  createdAt: number;
+  people: { name: string; email: string }[];
+}
+
+export async function listFamilies(): Promise<FamilyRow[] | null> {
+  try {
+    const snap = await getDocs(collection(db, 'households'));
+    const rows = await Promise.all(
+      snap.docs.map(async (d) => {
+        const h = d.data() as { members?: string[]; names?: Record<string, string>; emails?: Record<string, string>; code?: string; createdAt?: number };
+        const st = await getDoc(doc(db, `households/${d.id}/meta/settings`)).catch(() => null);
+        return {
+          id: d.id,
+          code: h.code || '',
+          babyName: (st?.get('babyName') as string) || '',
+          createdAt: h.createdAt || 0,
+          people: (h.members || []).map((m) => ({ name: h.names?.[m] || '', email: h.emails?.[m] || '' })),
+        };
+      })
+    );
+    return rows.sort((a, b) => a.createdAt - b.createdAt);
   } catch {
     return null; // 관리자가 아니면 읽을 수 없음
   }
 }
 
-export async function createSignupCode(memo: string): Promise<string> {
-  for (let i = 0; i < 5; i++) {
-    const code = randomCode(8);
-    const ref = doc(db, 'signupCodes', code);
-    const ok = await runTransaction(db, async (tx) => {
-      const s = await tx.get(ref);
-      if (s.exists()) return false;
-      tx.set(ref, { createdAt: Date.now(), memo, usedBy: null });
-      return true;
-    });
-    if (ok) return code;
-  }
-  throw new Error('코드를 만들지 못했어요');
-}
-
-export async function deleteSignupCode(code: string) {
-  await deleteDoc(doc(db, 'signupCodes', code));
-}
-
-/* ───────────── 기존(공용) 데이터 → 우리 집으로 이전 ───────────── */
+/* ───────────── 기존(공용) 기록 → 광배·민주 가족으로 자동 이전 ───────────── */
 
 const LEGACY_COLS = ['items', 'notes', 'admin', 'sugar', 'photos'];
+const LEGACY_BABY_NAME = '체리'; // 기존 기록에는 태명이 저장돼 있지 않아 처음 옮길 때 한 번만 넣음
 
-export interface LegacyState {
-  available: boolean; // 기존 데이터를 읽을 수 있는 계정인지
-  migratedTo?: string;
-  done?: boolean;
+/** 예전 버전에서 쓰던 이메일→이름 (Vercel 환경변수 VITE_USER_NAMES) */
+function legacyName(): string {
+  const map: Record<string, string> = {};
+  String(import.meta.env.VITE_USER_NAMES || '')
+    .split(',')
+    .forEach((pair: string) => {
+      const [e, n] = pair.split(':');
+      if (e && n) map[e.trim().toLowerCase()] = n.trim();
+    });
+  return map[myEmail().toLowerCase()] || myEmail().split('@')[0];
 }
 
-export async function legacyState(): Promise<LegacyState> {
-  try {
-    const seedFlag = await getDoc(doc(db, 'meta/seed'));
-    if (!seedFlag.exists()) return { available: false };
-    const m = await getDoc(doc(db, 'meta/migrated'));
-    if (!m.exists()) return { available: true };
-    return { available: true, migratedTo: m.get('householdId'), done: !!m.get('done') };
-  } catch {
-    return { available: false };
-  }
-}
-
-export async function isMemberOf(hid: string): Promise<boolean> {
-  try {
-    const s = await getDoc(doc(db, 'households', hid));
-    return s.exists();
-  } catch {
-    return false;
-  }
-}
-
-/** 기존 데이터를 집으로 복사. 중간에 끊겨도 다시 실행하면 이어서 됨 */
-export async function migrateLegacy(hid: string, babyName: string, onProgress: (msg: string) => void) {
-  await setDoc(doc(db, 'meta/migrated'), { householdId: hid, done: false, at: Date.now(), by: auth.currentUser?.email || '' });
+async function copyLegacy(hid: string, onProgress: (msg: string) => void) {
   const base = `households/${hid}`;
-  // 기본 체크리스트가 다시 들어가지 않게 먼저 표시
-  await setDoc(doc(db, `${base}/meta/seed`), { at: Date.now(), by: 'migration' });
-
   for (const col of LEGACY_COLS) {
     const snap = await getDocs(collection(db, col));
-    onProgress(`${col} ${snap.size}개 옮기는 중…`);
+    onProgress(`기록 불러오는 중… (${col})`);
     let batch = writeBatch(db);
     let ops = 0;
     let bytes = 0;
@@ -368,10 +387,71 @@ export async function migrateLegacy(hid: string, babyName: string, onProgress: (
     }
     if (ops) await batch.commit();
   }
-
-  onProgress('설정 옮기는 중…');
   const [settings, lists] = await Promise.all([getDoc(doc(db, 'meta/settings')), getDoc(doc(db, 'meta/lists'))]);
-  await setDoc(doc(db, `${base}/meta/settings`), { ...DEFAULT_SETTINGS, ...(settings.data() || {}), babyName }, { merge: true });
+  await setDoc(doc(db, `${base}/meta/settings`), { ...DEFAULT_SETTINGS, ...(settings.data() || {}), babyName: LEGACY_BABY_NAME }, { merge: true });
   if (lists.exists()) await setDoc(doc(db, `${base}/meta/lists`), lists.data()!, { merge: true });
-  await setDoc(doc(db, 'meta/migrated'), { done: true, doneAt: Date.now() }, { merge: true });
+}
+
+export type LegacyResult = 'none' | 'linked' | 'waiting';
+
+/**
+ * 광배·민주 계정이 처음 들어오면 자동으로:
+ *  - 아무도 안 옮겼으면 → 가족을 만들고 기존 기록 전부(상태·혈당·사진 포함) 옮기기
+ *  - 이미 옮겼으면 → 그 가족에 자동 합류
+ *  - 다른 폰에서 옮기는 중이면 → 'waiting'
+ */
+export async function autoLegacy(onProgress: (msg: string) => void): Promise<LegacyResult> {
+  try {
+    const seedFlag = await getDoc(doc(db, 'meta/seed'));
+    if (!seedFlag.exists()) return 'none';
+  } catch {
+    return 'none'; // 예전 기록을 읽을 수 없는 계정 = 새 사용자
+  }
+  const u = uid();
+  const name = legacyName();
+  const flagRef = doc(db, 'meta/migrated');
+
+  // 누가 옮길지 정하기 (두 폰이 동시에 열어도 한 명만)
+  const claimed = await runTransaction(db, async (tx) => {
+    const f = await tx.get(flagRef);
+    if (f.exists()) return f.data() as { householdId: string; done?: boolean; by?: string; at?: number };
+    const hid = newId();
+    tx.set(flagRef, { householdId: hid, done: false, by: u, at: Date.now() });
+    return { householdId: hid, done: false, by: u, fresh: true } as { householdId: string; done?: boolean; by?: string; fresh?: boolean };
+  });
+  const hid = claimed.householdId;
+
+  if (claimed.by === u && !claimed.done) {
+    // 내가 옮기는 사람 (처음이거나 중간에 끊겼다가 다시)
+    onProgress('체리 기록 불러오는 중…');
+    if (!(await isMemberOf(hid))) await createHousehold(name, hid);
+    session.hid = hid;
+    await copyLegacy(hid, onProgress);
+    await setDoc(flagRef, { done: true, doneAt: Date.now() }, { merge: true });
+    await linkUser(hid, name);
+    // 관리자 계정이면 우리 목록을 다른 가족용 기본 데이터로 저장
+    saveTemplateFromMyFamily().catch(() => {});
+    return 'linked';
+  }
+  if (!claimed.done) return 'waiting'; // 다른 폰에서 옮기는 중
+
+  // 이미 옮겨짐 → 자동 합류
+  if (!(await isMemberOf(hid))) {
+    await updateDoc(doc(db, 'households', hid), {
+      members: arrayUnion(u),
+      [`names.${u}`]: name,
+      [`emails.${u}`]: myEmail(),
+    });
+  }
+  await linkUser(hid, name);
+  return 'linked';
+}
+
+export async function isMemberOf(hid: string): Promise<boolean> {
+  try {
+    const s = await getDoc(doc(db, 'households', hid));
+    return s.exists();
+  } catch {
+    return false;
+  }
 }

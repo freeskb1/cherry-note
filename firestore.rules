@@ -2,9 +2,9 @@ rules_version = '2';
 
 // ─────────────────────────────────────────────────────────────
 // 출산 준비노트 보안 규칙
-// 바꿀 곳 2군데:
-//   ADMINS : 가입 코드를 만들 수 있는 관리자 이메일
-//   LEGACY : 예전(공용) 데이터를 우리 집으로 옮길 수 있는 두 사람 이메일
+// 바꿀 곳: LEGACY 의 '민주님이메일' 을 민주님 로그인 이메일로
+//   ADMINS : 사용 중인 가족 목록을 볼 수 있는 관리자
+//   LEGACY : 예전(공용) 기록을 쓰던 두 사람. 첫 로그인 때 자동으로 같은 가족으로 옮겨져요
 // ─────────────────────────────────────────────────────────────
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -21,76 +21,81 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/households/$(hid))
         && uid() in get(/databases/$(database)/documents/households/$(hid)).data.members;
     }
+    // 이름·이메일 지도에서 내 칸만 바뀌었는지
+    function onlyMyKeys(field) {
+      return !(field in resource.data)
+        ? request.resource.data[field].keys().hasOnly([uid()])
+        : request.resource.data[field].diff(resource.data[field]).affectedKeys().hasOnly([uid()]);
+    }
+    // 1명뿐인 가족에 나 자신만 추가
+    function addingOnlyMe() {
+      return !(uid() in resource.data.members)
+        && resource.data.members.size() == 1
+        && request.resource.data.members == resource.data.members.concat([uid()])
+        && onlyMyKeys('names') && onlyMyKeys('emails');
+    }
 
-    // 내 계정 정보 (어느 집에 속했는지)
+    // 내 계정 정보 (어느 가족인지)
     match /users/{u} {
       allow read, write: if signedIn() && uid() == u;
     }
 
-    // 집: 멤버만 읽기. 최대 2명
+    // 가족: 멤버만 읽기. 최대 2명
     match /households/{hid} {
-      allow get: if isMember(hid);
+      allow get: if isMember(hid) || isAdmin();
+      allow list: if isAdmin();   // 관리자: 사용 중인 가족 목록 (이름·이메일·가족 코드만)
 
-      // 새 집: 나 혼자 멤버로, 가입 코드를 같이 사용 처리해야 함 (기존 사용자는 코드 없이)
+      // 새 가족: 나 혼자 멤버로, 가족 코드도 같이 만들어야 함
       allow create: if signedIn()
         && request.resource.data.members == [uid()]
-        && request.resource.data.keys().hasOnly(['members', 'names', 'createdAt', 'createdBy', 'signupCode'])
-        && (isLegacy() || signupOk(request.resource.data.signupCode, hid));
+        && request.resource.data.keys().hasOnly(['members', 'names', 'emails', 'code', 'createdAt', 'createdBy'])
+        && request.resource.data.createdBy == uid()
+        && getAfter(/databases/$(database)/documents/invites/$(request.resource.data.code)).data.householdId == hid;
 
-      // 멤버: 내 이름만 수정 / 초대받은 사람: 초대 코드로 자기 자신만 추가
-      allow update: if (isMember(hid)
+      allow update: if
+        // 멤버: 내 이름만 수정
+        (isMember(hid)
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['names'])
-          && request.resource.data.names.diff(resource.data.names).affectedKeys().hasOnly([uid()]))
-        || joinOk(hid);
+          && onlyMyKeys('names'))
+        // 배우자: 가족 코드로 자기 자신만 추가
+        || (signedIn()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members', 'names', 'emails', 'joinedVia'])
+          && addingOnlyMe()
+          && get(/databases/$(database)/documents/invites/$(request.resource.data.joinedVia)).data.householdId == hid)
+        // 광배·민주: 기존 기록을 옮긴 가족에 자동 합류
+        || (isLegacy()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members', 'names', 'emails'])
+          && addingOnlyMe()
+          && get(/databases/$(database)/documents/meta/migrated).data.householdId == hid);
 
       allow delete: if false;
 
-      // 집 안의 모든 목록·사진·설정: 멤버만
+      // 가족 안의 모든 목록·사진·설정: 멤버만
       match /{col}/{rest=**} {
         allow read, write: if isMember(hid);
       }
+      // 관리자 목록에 태명 표시용
+      match /meta/settings {
+        allow get: if isAdmin();
+      }
     }
 
-    function signupOk(code, hid) {
-      return code is string
-        && get(/databases/$(database)/documents/signupCodes/$(code)).data.usedBy == null
-        && getAfter(/databases/$(database)/documents/signupCodes/$(code)).data.usedBy == uid()
-        && getAfter(/databases/$(database)/documents/signupCodes/$(code)).data.householdId == hid;
-    }
-
-    function joinOk(hid) {
-      let code = request.resource.data.joinedVia;
-      let inv = get(/databases/$(database)/documents/invites/$(code)).data;
-      return signedIn()
-        && !(uid() in resource.data.members)
-        && resource.data.members.size() == 1
-        && request.resource.data.members == resource.data.members.concat([uid()])
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members', 'names', 'joinedVia'])
-        && request.resource.data.names.diff(resource.data.names).affectedKeys().hasOnly([uid()])
-        && inv.householdId == hid
-        && inv.expiresAt > request.time.toMillis();
-    }
-
-    // 배우자 초대 코드 (6자리, 72시간)
+    // 가족 코드 (6자리, 만료 없음. 가족이 2명이 되면 더 못 들어옴)
     match /invites/{code} {
       allow get: if signedIn();
-      allow create: if isMember(request.resource.data.householdId)
-        && request.resource.data.createdBy == uid();
-      allow delete: if signedIn() && isMember(resource.data.householdId);
+      allow create: if signedIn()
+        && request.resource.data.createdBy == uid()
+        && uid() in getAfter(/databases/$(database)/documents/households/$(request.resource.data.householdId)).data.members;
+      allow update, delete: if false;
     }
 
-    // 관리자가 만드는 가입 코드 (8자리)
-    match /signupCodes/{code} {
-      allow get: if signedIn();
-      allow list, create, delete: if isAdmin();
-      allow update: if isAdmin() || (signedIn()
-        && resource.data.usedBy == null
-        && request.resource.data.usedBy == uid()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usedBy', 'usedAt', 'householdId', 'usedEmail'])
-        && existsAfter(/databases/$(database)/documents/households/$(request.resource.data.householdId)));
+    // 새 가족이 받는 기본 데이터 (용품·신청 목록)
+    match /templates/{id} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
     }
 
-    // 2시간 후 푸시 예약: 그 집 멤버만
+    // 식후 측정 푸시 예약: 그 가족 멤버만
     match /alarms/{id} {
       allow read: if signedIn() && isMember(resource.data.householdId);
       allow create: if isMember(request.resource.data.householdId);
@@ -104,12 +109,12 @@ service cloud.firestore {
       allow delete: if signedIn() && (resource == null || resource.data.uid == uid());
     }
 
-    // 예전 공용 데이터: 기존 두 사람만 읽기 (이전이 끝나면 지워도 됨)
-    match /items/{d}  { allow read, delete: if isLegacy(); }
-    match /notes/{d}  { allow read, delete: if isLegacy(); }
-    match /admin/{d}  { allow read, delete: if isLegacy(); }
-    match /sugar/{d}  { allow read, delete: if isLegacy(); }
-    match /photos/{d} { allow read, delete: if isLegacy(); }
+    // 예전 공용 기록: 광배·민주만 읽기 (옮긴 뒤 지워도 됨)
+    match /items/{d}  { allow read: if isLegacy(); }
+    match /notes/{d}  { allow read: if isLegacy(); }
+    match /admin/{d}  { allow read: if isLegacy(); }
+    match /sugar/{d}  { allow read: if isLegacy(); }
+    match /photos/{d} { allow read: if isLegacy(); }
     match /meta/{d}   { allow read, write: if isLegacy(); }
   }
 }

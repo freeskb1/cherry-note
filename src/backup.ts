@@ -47,7 +47,7 @@ export async function backupExcel() {
       })),
     '신청·서류'
   );
-  const slotOrder: Slot[] = ['fasting', 'breakfast', 'lunch', 'dinner'];
+  const slotOrder: Slot[] = ['fasting', 'breakfast', 'lunch', 'dinner', 'bedtime'];
   sheet(
     sugar
       .sort((a, b) => (a.date === b.date ? slotOrder.indexOf(a.slot) - slotOrder.indexOf(b.slot) : a.date < b.date ? -1 : 1))

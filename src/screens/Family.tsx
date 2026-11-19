@@ -1,17 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useStore } from '../App';
-import {
-  createInvite,
-  createSignupCode,
-  deleteSignupCode,
-  listSignupCodes,
-  myInvites,
-  renameMe,
-  SignupCode,
-} from '../data';
+import { FamilyRow, listFamilies, renameMe, saveTemplateFromMyFamily } from '../data';
 import { session } from '../session';
 import { md } from '../util';
-import { useToast } from '../ui';
+import { Sheet, useToast } from '../ui';
 
 async function copy(text: string): Promise<boolean> {
   try {
@@ -33,37 +25,56 @@ async function share(text: string, url: string): Promise<boolean> {
   }
 }
 
-const left = (at: number) => {
-  const h = Math.max(0, Math.round((at - Date.now()) / 3600000));
-  return h >= 24 ? `${Math.floor(h / 24)}일 ${h % 24}시간 남음` : `${h}시간 남음`;
-};
+function useInvite() {
+  const { household, settings } = useStore();
+  const code = household.code || '';
+  const link = code ? `${location.origin}/#/join/${code}` : '';
+  const text = `${settings.babyName ? settings.babyName + '네 ' : ''}출산 준비노트에 초대해요. 링크를 열고 가입하면 같은 가족으로 연결돼요.\n가족 코드: ${code}`;
+  return { code, link, text, full: household.members.length >= 2 };
+}
 
-/** 우리 집: 멤버, 내 이름, 배우자 초대 */
+/** 가족 코드 + 보내기 버튼 */
+function InviteBox() {
+  const toast = useToast();
+  const { code, link, text } = useInvite();
+  if (!code) return null;
+  return (
+    <>
+      <div className="code-box">
+        <span className="code-text">{code}</span>
+        <span className="muted small">1/2명</span>
+      </div>
+      <div className="two">
+        <button type="button" className="btn-primary" onClick={async () => { if (!(await share(text, link))) toast((await copy(`${text}\n${link}`)) ? '초대 링크를 복사했어요' : '복사가 안 돼요. 코드를 직접 알려주세요'); }}>
+          초대 링크 보내기
+        </button>
+        <button type="button" className="btn-ghost" onClick={async () => toast((await copy(link)) ? '링크를 복사했어요' : '복사가 안 돼요. 코드를 직접 알려주세요')}>
+          링크 복사
+        </button>
+      </div>
+      <div className="hint">배우자가 링크를 열고 가입하면 자동으로 우리 가족에 들어와요. 두 명이 다 차면 코드는 더 쓸 수 없어요.</div>
+    </>
+  );
+}
+
+/** 설정: 우리 가족 */
 export function FamilyPanel() {
   const { household } = useStore();
   const toast = useToast();
   const [name, setName] = useState(session.name);
-  const [invite, setInvite] = useState<{ code: string; expiresAt: number } | null>(null);
-  const [busy, setBusy] = useState(false);
-  const full = household.members.length >= 2;
-
-  useEffect(() => {
-    if (!full) myInvites().then((l) => l.length && setInvite(l.sort((a, b) => b.expiresAt - a.expiresAt)[0])).catch(() => {});
-  }, [full]);
-
-  const link = invite ? `${location.origin}/#/join/${invite.code}` : '';
-  const shareText = invite ? `출산 준비노트에 초대해요. 링크를 열고 가입하면 같은 공간에 들어와요.\n초대 코드: ${invite.code}` : '';
+  const { code, full } = useInvite();
 
   return (
     <section className="panel">
-      <div className="t">우리 집</div>
-      {household.members.map((m) => (
-        <div key={m} className="member-row">
-          <span className="who">{household.names?.[m] || '이름 없음'}</span>
-          {m === session.uid && <span className="muted small">나</span>}
-        </div>
-      ))}
-
+      <div className="panel-row">
+        <div className="t grow">우리 가족</div>
+        {code && <span className="muted small">가족 코드 <b className="mono">{code}</b></span>}
+      </div>
+      <div className="member-row">
+        {household.members.map((m) => (
+          <span key={m} className="who">{household.names?.[m] || '이름 없음'}{m === session.uid ? ' (나)' : ''}</span>
+        ))}
+      </div>
       <div className="inline">
         <input id="fam-name" className="fld" value={name} maxLength={12} onChange={(e) => setName(e.target.value)} aria-label="내 이름" />
         <button
@@ -79,109 +90,94 @@ export function FamilyPanel() {
           이름 바꾸기
         </button>
       </div>
-
-      {full ? (
-        <div className="hint">두 사람이 함께 쓰고 있어요. 모든 목록은 이 두 사람만 볼 수 있어요.</div>
-      ) : (
-        <>
-          <div className="hint">배우자를 초대하면 용품·노트·신청·혈당 기록을 함께 봐요. 한 집에는 두 명까지 들어올 수 있어요.</div>
-          {invite ? (
-            <>
-              <div className="code-box">
-                <span className="code-text">{invite.code}</span>
-                <span className="muted small">{left(invite.expiresAt)}</span>
-              </div>
-              <div className="two">
-                <button type="button" className="btn-primary" onClick={async () => { if (!(await share(shareText, link))) { if (await copy(`${shareText}\n${link}`)) toast('초대 링크를 복사했어요'); else toast('복사가 안 돼요. 코드를 직접 알려주세요'); } }}>
-                  초대 링크 보내기
-                </button>
-                <button type="button" className="btn-ghost" onClick={async () => toast((await copy(link)) ? '링크를 복사했어요' : '복사가 안 돼요. 코드를 직접 알려주세요')}>
-                  링크 복사
-                </button>
-              </div>
-              <div className="hint">배우자가 링크를 열고 가입하면 자동으로 들어와요. 앱에서 코드를 직접 입력해도 돼요. 코드는 72시간 동안 쓸 수 있어요.</div>
-            </>
-          ) : (
-            <button
-              type="button"
-              className="btn-primary"
-              disabled={busy}
-              onClick={async () => {
-                setBusy(true);
-                try {
-                  setInvite(await createInvite());
-                } catch (e: any) {
-                  toast(e?.message || '초대 코드를 만들지 못했어요');
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            >
-              {busy ? '만드는 중…' : '배우자 초대 코드 만들기'}
-            </button>
-          )}
-        </>
-      )}
+      {full ? <div className="hint">두 사람이 함께 쓰고 있어요. 모든 기록은 이 두 사람만 볼 수 있어요.</div> : <InviteBox />}
     </section>
   );
 }
 
-/** 관리자만 보임: 지인에게 줄 가입 코드 */
-export function AdminCodesPanel() {
+/** 새 가족을 만든 직후 한 번: 가족 코드로 배우자 초대 */
+export function WelcomeInvite() {
+  const { settings, household } = useStore();
+  const [open, setOpen] = useState(() => {
+    try {
+      return sessionStorage.getItem('cherry.welcome') === '1';
+    } catch {
+      return false;
+    }
+  });
+  const close = () => {
+    try {
+      sessionStorage.removeItem('cherry.welcome');
+    } catch {
+      /* 무시 */
+    }
+    setOpen(false);
+  };
+  if (!open || household.members.length >= 2) return null;
+  return (
+    <Sheet open onClose={close}>
+      <div className="sheet-title">{settings.babyName ? `${settings.babyName}네 준비노트가 생겼어요` : '우리 가족 준비노트가 생겼어요'}</div>
+      <div className="hint">이제 배우자를 초대하면 모든 목록과 기록을 둘이 함께 봐요.</div>
+      <InviteBox />
+      <button type="button" className="btn-ghost" onClick={close}>나중에 할게요</button>
+      <div className="hint center">초대는 설정 → 우리 가족에서도 할 수 있어요.</div>
+    </Sheet>
+  );
+}
+
+/** 관리자만 보임: 사용 중인 가족 목록 */
+export function AdminFamiliesPanel() {
   const toast = useToast();
-  const [codes, setCodes] = useState<SignupCode[] | null>(null);
-  const [memo, setMemo] = useState('');
+  const [rows, setRows] = useState<FamilyRow[] | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const load = () => listSignupCodes().then(setCodes);
   useEffect(() => {
-    load();
+    listFamilies().then(setRows);
   }, []);
 
-  if (codes === null) return null; // 관리자가 아니면 안 보임
+  if (rows === null) return null; // 관리자가 아니면 안 보임
 
   return (
-    <section className="panel">
-      <div className="t">가입 코드 (관리자)</div>
-      <div className="hint">지인에게 줄 코드예요. 코드 하나로 집 하나를 만들 수 있고, 배우자는 그 집의 초대 링크로 들어와서 코드가 필요 없어요.</div>
-      <div className="inline">
-        <input id="adm-memo" className="fld" placeholder="누구에게 줄지 메모 (예: 지수네)" value={memo} onChange={(e) => setMemo(e.target.value)} maxLength={20} />
-        <button
-          type="button"
-          className="btn-small"
-          disabled={busy}
-          onClick={async () => {
-            setBusy(true);
-            try {
-              const c = await createSignupCode(memo.trim());
-              setMemo('');
-              await load();
-              toast((await copy(c)) ? `${c} 복사했어요` : `코드 ${c}`);
-            } finally {
-              setBusy(false);
-            }
-          }}
-        >
-          새 코드
-        </button>
+    <section className="panel admin-panel">
+      <div className="panel-row">
+        <span className="t grow">사용 중인 가족 · {rows.length}</span>
+        <span className="small warn-label">관리자만 보임</span>
       </div>
       <div className="code-list">
-        {codes.length === 0 && <div className="hint">아직 만든 코드가 없어요.</div>}
-        {codes.map((c) => (
-          <div key={c.code} className="code-item">
-            <span className="mono">{c.code}</span>
-            <span className="grow ell">{c.memo || ''}</span>
-            {c.usedBy ? (
-              <span className="muted small">{c.usedEmail || '사용됨'} · {md(c.usedAt)}</span>
-            ) : (
-              <>
-                <button type="button" className="link-btn" onClick={async () => toast((await copy(c.code)) ? '복사했어요' : c.code)}>복사</button>
-                <button type="button" className="link-btn" onClick={async () => { await deleteSignupCode(c.code); load(); }}>삭제</button>
-              </>
-            )}
+        {rows.map((r) => (
+          <div key={r.id} className="family-item">
+            <div className="panel-row">
+              <span className="mono">{r.code || '-'}</span>
+              <b className="grow">{r.babyName || '아기'}</b>
+              <span className="muted small">{md(r.createdAt)} 시작</span>
+            </div>
+            <div className="muted small">
+              {r.people.map((p) => `${p.name || '이름 없음'} ${p.email}`).join(' · ')}
+              {r.people.length < 2 && <span className="accent"> · 배우자 아직 안 들어옴</span>}
+            </div>
           </div>
         ))}
       </div>
+      <div className="hint">누가 어떤 가족 코드로 시작했는지만 보여요. 각 가족의 목록·혈당 기록은 여기서 보이지 않아요.</div>
+      <button
+        type="button"
+        className="btn-ghost"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true);
+          try {
+            const r = await saveTemplateFromMyFamily();
+            toast(`기본 데이터를 갱신했어요 (용품 ${r.items} · 신청 ${r.admin})`);
+          } catch {
+            toast('기본 데이터를 저장하지 못했어요');
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        {busy ? '저장 중…' : '우리 목록으로 기본 데이터 갱신'}
+      </button>
+      <div className="hint">새로 시작하는 가족이 받는 용품·신청 목록이에요. 품목·카테고리·수량·우선순위만 저장되고 상태·메모·가격·구매처는 빠져요.</div>
     </section>
   );
 }

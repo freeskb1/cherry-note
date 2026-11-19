@@ -8,7 +8,7 @@ import {
 } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from './firebase';
-import { seedOnce, useCollection, useLists, useSettings, UserDoc } from './data';
+import { autoLegacy, useCollection, useLists, useSettings, UserDoc } from './data';
 import { registerToken } from './push';
 import { getPendingInvite, session, setPendingInvite } from './session';
 import { AdminTask, Household, Item, Lists, Note, Settings } from './types';
@@ -20,6 +20,7 @@ import Admin from './screens/Admin';
 import SugarScreen from './screens/Sugar';
 import SettingsScreen from './screens/Settings';
 import Onboarding from './screens/Onboarding';
+import { WelcomeInvite } from './screens/Family';
 
 export type Tab = 'home' | 'shop' | 'notes' | 'admin' | 'sugar' | 'settings';
 
@@ -163,7 +164,6 @@ function Main({ household }: { household: Household }) {
   }, []);
 
   useEffect(() => {
-    seedOnce().catch(() => {});
     registerToken().catch(() => {});
     setPendingInvite(null); // 이미 집이 있으면 남은 초대 코드는 버림
   }, []);
@@ -201,11 +201,54 @@ function Main({ household }: { household: Household }) {
           </a>
         ))}
       </nav>
+      <WelcomeInvite />
     </StoreCtx.Provider>
   );
 }
 
-/** 로그인한 사람의 집을 찾아서 연결 */
+/** 가족이 없을 때: 광배·민주 계정이면 기존 기록을 자동으로 옮기고, 아니면 시작 화면 */
+function NoFamily() {
+  const [state, setState] = useState<'checking' | 'waiting' | 'none' | 'error'>('checking');
+  const [msg, setMsg] = useState('');
+  useEffect(() => {
+    let alive = true;
+    let timer: number | undefined;
+    const tryOnce = async () => {
+      try {
+        const r = await autoLegacy((m) => alive && setMsg(m));
+        if (!alive) return;
+        if (r === 'waiting') {
+          setState('waiting');
+          timer = window.setTimeout(tryOnce, 4000);
+        } else if (r === 'none') setState('none');
+        // 'linked'면 users 문서가 바뀌면서 자동으로 메인 화면으로 넘어감
+      } catch (e: any) {
+        if (alive) {
+          setState('error');
+          setMsg(e?.message || '기록을 불러오지 못했어요.');
+        }
+      }
+    };
+    tryOnce();
+    return () => {
+      alive = false;
+      window.clearTimeout(timer);
+    };
+  }, []);
+  if (state === 'none') return <Onboarding />;
+  return (
+    <div className="login">
+      <img src="/icon-192.png" alt="" width={64} height={64} />
+      <h1>{state === 'error' ? '잠깐 문제가 생겼어요' : '잠시만요'}</h1>
+      <p className="sub">
+        {state === 'waiting' ? '다른 폰에서 기록을 옮기는 중이에요. 끝나면 자동으로 열려요.' : state === 'error' ? msg : msg || '불러오는 중…'}
+      </p>
+      {state === 'error' && <button className="btn-primary" type="button" onClick={() => location.reload()}>다시 시도</button>}
+    </div>
+  );
+}
+
+/** 로그인한 사람의 가족을 찾아서 연결 */
 function Signed({ user }: { user: User }) {
   const [userDoc, setUserDoc] = useState<UserDoc | null | undefined>(undefined);
   const [household, setHousehold] = useState<Household | null | undefined>(undefined);
@@ -234,7 +277,7 @@ function Signed({ user }: { user: User }) {
   }, [hid, userDoc]);
 
   if (userDoc === undefined || household === undefined) return <div className="boot" />;
-  if (!household) return <Onboarding />;
+  if (!household) return <NoFamily />;
 
   session.hid = household.id;
   session.name = household.names?.[user.uid] || userDoc?.name || (user.email || '').split('@')[0];

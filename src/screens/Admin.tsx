@@ -6,7 +6,6 @@ import { matches, md } from '../util';
 import { DeleteButton, Empty, Fab, Field, Icon, LinkText, SearchBox, Seg, Sheet, StarButton, StatusMenu, useToast } from '../ui';
 
 const tone = (s: AdminStatus) => ({ todo: 'st-todo', doing: 'st-wait', done: 'st-done', na: 'st-skip' })[s];
-const OWNERS = ['광배', '민주', '같이'];
 
 export default function Admin() {
   const { admin, openId, clearOpen, ready } = useStore();
@@ -106,6 +105,9 @@ export default function Admin() {
 }
 
 function TaskSheet({ editing, defaultPeriod, onClose }: { editing: AdminTask | 'new' | null; defaultPeriod: Period; onClose: () => void }) {
+  const { household } = useStore();
+  // 담당: 우리 가족 두 사람 이름 + 같이 (예전에 저장된 이름이 지금 목록에 없으면 그것도 보여줌)
+  const OWNERS = [...household.members.map((m) => household.names?.[m]).filter((n): n is string => !!n), '같이'];
   const toast = useToast();
   const isNew = editing === 'new';
   const blank: Omit<AdminTask, 'id'> = { title: '', period: defaultPeriod, status: 'todo', due: '', owner: '', place: '', link: '', memo: '', star: false };
@@ -141,7 +143,7 @@ function TaskSheet({ editing, defaultPeriod, onClose }: { editing: AdminTask | '
         <div className="two">
           <Field label="기한·가능일" htmlFor="ad-due"><input id="ad-due" className="fld" placeholder="예: 12/12부터, 2/20까지" value={f.due} onChange={(e) => set({ due: e.target.value })} /></Field>
           <Field label="담당">
-            <Seg small items={OWNERS.map((o) => ({ key: o, label: o }))} value={f.owner || ''} onChange={(o) => set({ owner: f.owner === o ? '' : o })} />
+            <Seg small items={(f.owner && !OWNERS.includes(f.owner) ? [...OWNERS, f.owner] : OWNERS).map((o) => ({ key: o, label: o }))} value={f.owner || ''} onChange={(o) => set({ owner: f.owner === o ? '' : o })} />
           </Field>
         </div>
         <Field label="신청처" htmlFor="ad-place"><input id="ad-place" className="fld" value={f.place} onChange={(e) => set({ place: e.target.value })} /></Field>

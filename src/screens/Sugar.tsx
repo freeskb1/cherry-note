@@ -3,13 +3,15 @@ import { useStore } from '../App';
 import { cancelAlarm, remove, removePhoto, save, savePhoto, setAlarm, usePhoto, useSugarMonth } from '../data';
 import { compressImage, shareToAlbum } from '../image';
 import { enablePush, pushState, PushState } from '../push';
-import { SLOT_LABEL, SLOTS, Slot, Sugar } from '../types';
-import { downloadIcs, hm, isIOS, pad, remain, toTs, today, ymd } from '../util';
+import { isNumOnly, SLOT_LABEL, SLOTS, Settings, Slot, Sugar } from '../types';
+import { downloadIcs, durLabel, hm, isIOS, pad, remain, toTs, today, ymd } from '../util';
 import { DeleteButton, Field, Icon, PhotoViewer, Sheet, useToast } from '../ui';
 import { getAlarmMode, openPhoneAlarm, phoneAlarmSupported } from '../phoneAlarm';
 
-const TWO_H = 2 * 60 * 60 * 1000;
 const sid = (date: string, slot: Slot) => `${date}_${slot}`;
+const targetOf = (st: Settings, slot: Slot) =>
+  slot === 'fasting' ? st.targetFasting : slot === 'bedtime' ? st.targetBedtime || st.targetPost : st.targetPost;
+const postTitle = (slot: Slot, min: number) => `${SLOT_LABEL[slot]} 식후 ${durLabel(min)} 혈당`;
 
 export default function SugarScreen() {
   const { settings } = useStore();
@@ -32,7 +34,8 @@ export default function SugarScreen() {
   }, []);
 
   const byId = useMemo(() => new Map(rows.map((r) => [r.id, r])), [rows]);
-  const isHigh = (r: Sugar) => r.value != null && r.value >= (r.slot === 'fasting' ? settings.targetFasting : settings.targetPost);
+  const postMin = settings.postMealMin || 120;
+  const isHigh = (r: Sugar) => r.value != null && r.value >= targetOf(settings, r.slot);
   const highs = useMemo(() => {
     const m: Record<string, number> = {};
     rows.forEach((r) => {
@@ -58,7 +61,7 @@ export default function SugarScreen() {
   const [sy, sm, sd] = sel.split('-').map(Number);
   const weekday = '일월화수목금토'[new Date(sy, sm - 1, sd).getDay()];
 
-  // 사진 찍기 → 자동 저장 + 2시간 후 알람
+  // 사진 찍기 → 자동 저장 + 설정한 시간 뒤 알람
   const openCamera = (slot: Slot, album = false) => {
     pickSlot.current = slot;
     (album ? albumRef : camRef).current?.click();
@@ -72,14 +75,14 @@ export default function SugarScreen() {
     try {
       const data = await compressImage(file);
       const photoId = await savePhoto(data);
-      // 오늘: 올린 시각 + 2시간 알람 / 지난 날짜: 시간 없이 사진만 저장
+      // 오늘: 올린 시각 + 설정한 시간 뒤 알람 / 지난 날짜: 시간 없이 사진만 저장
       const isToday = sel === today();
       const mealAt = prev?.mealAt ?? (isToday ? Date.now() : null);
-      const measureAt = prev?.measureAt ?? (mealAt ? mealAt + TWO_H : null);
+      const measureAt = prev?.measureAt ?? (mealAt ? mealAt + postMin * 60000 : null);
       await save('sugar', id, { date: sel, slot, photoId, mealAt, measureAt, value: prev?.value ?? null });
       if (prev?.photoId) await removePhoto(prev.photoId);
       const hasValue = prev?.value != null;
-      if (!hasValue && measureAt) await setAlarm(id, measureAt, `${SLOT_LABEL[slot]} 식후 2시간 혈당`, `${hm(measureAt)} 측정 시간이에요`);
+      if (!hasValue && measureAt) await setAlarm(id, measureAt, postTitle(slot, postMin), `${hm(measureAt)} 측정 시간이에요`);
 
       const actions = [
         {
@@ -100,7 +103,7 @@ export default function SugarScreen() {
       if (needAlarm && mode !== 'off' && phoneAlarmSupported()) {
         actions.push({ label: '폰 알람', run: async () => { openPhoneAlarm(measureAt!, phoneLabel); } });
       } else if (needAlarm && push !== 'on') {
-        actions.push({ label: '캘린더', run: async () => downloadIcs(`${SLOT_LABEL[slot]} 식후 2시간 혈당`, measureAt!) });
+        actions.push({ label: '캘린더', run: async () => downloadIcs(postTitle(slot, postMin), measureAt!) });
       }
       toast(hasValue ? '사진을 바꿨어요' : needAlarm ? `저장 · ${hm(measureAt)} 알람` : '사진을 저장했어요', actions, 7000);
       if (needAlarm && mode === 'auto') setTimeout(() => openPhoneAlarm(measureAt!, phoneLabel), 600);
@@ -112,16 +115,16 @@ export default function SugarScreen() {
   const slotRow = (slot: Slot) => {
     const r = byId.get(sid(sel, slot));
     const label = SLOT_LABEL[slot];
-    if (slot === 'fasting') {
+    if (isNumOnly(slot)) {
       return (
         <div key={slot} className={'slot' + (r && isHigh(r) ? ' high' : '')}>
           <div className="slab">{label}</div>
-          <button type="button" className={'num' + (r?.value != null ? '' : ' empty')} onClick={() => setKeypad({ slot, date: sel })} aria-label="공복 혈당 입력">
+          <button type="button" className={'num' + (r?.value != null ? '' : ' empty')} onClick={() => setKeypad({ slot, date: sel })} aria-label={`${label} 혈당 입력`}>
             {r?.value ?? '입력'}
           </button>
           {r?.value != null && <Badge high={isHigh(r)} />}
           {r && (
-            <button type="button" className="slot-more" onClick={() => setEditing(r)} aria-label="공복 기록 수정">
+            <button type="button" className="slot-more" onClick={() => setEditing(r)} aria-label={`${label} 기록 수정`}>
               {hm(r.measureAt)} <Icon name="next" size={16} />
             </button>
           )}
@@ -134,7 +137,7 @@ export default function SugarScreen() {
           <div className="slab">{label}</div>
           <button type="button" className="cam" onClick={() => openCamera(slot)}>
             <span className="cam-ico"><Icon name="camera" /></span>
-            <span className="cam-txt"><b>눌러서 바로 카메라</b><small>찍으면 자동 저장 · 2시간 후 알람</small></span>
+            <span className="cam-txt"><b>눌러서 바로 카메라</b><small>찍으면 자동 저장 · {durLabel(postMin)} 후 알람</small></span>
           </button>
           <button type="button" className="album" onClick={() => openCamera(slot, true)}>앨범</button>
         </div>
@@ -161,7 +164,7 @@ export default function SugarScreen() {
           {live && due > now && (getAlarmMode() !== 'off' && phoneAlarmSupported() ? (
             <button type="button" className="slot-bell" aria-label="폰 알람 다시 맞추기" onClick={() => openPhoneAlarm(due, `${label} 혈당 측정`)}><Icon name="bell" size={20} /></button>
           ) : push !== 'on' ? (
-            <button type="button" className="slot-bell" aria-label="캘린더에 알람 넣기" onClick={() => downloadIcs(`${label} 식후 2시간 혈당`, due)}><Icon name="bell" size={20} /></button>
+            <button type="button" className="slot-bell" aria-label="캘린더에 알람 넣기" onClick={() => downloadIcs(postTitle(slot, postMin), due)}><Icon name="bell" size={20} /></button>
           ) : null)}
           <button type="button" className="num go" onClick={() => setKeypad({ slot, date: sel })}>입력</button>
         </div>
@@ -208,7 +211,7 @@ export default function SugarScreen() {
         <div className="cal-legend">
           <span>목표 초과</span>
           <i className="lg h1" />1<i className="lg h2" />2<i className="lg h3" />3+
-          <a href="#/settings" className="push">공복 {settings.targetFasting} · 식후 {settings.targetPost}</a>
+          <a href="#/settings" className="push">공복 {settings.targetFasting} · 식후 {settings.targetPost}{settings.bedtime ? ` · 자기 전 ${settings.targetBedtime || settings.targetPost}` : ''}</a>
         </div>
       </div>
 
@@ -222,7 +225,7 @@ export default function SugarScreen() {
             <span>이 브라우저는 푸시 알림을 지원하지 않아요. 사진 저장 후 '캘린더' 버튼으로 알람을 등록하세요.</span>
           ) : (
             <>
-              <span className="grow">2시간 후 알람을 받으려면 알림을 켜주세요.</span>
+              <span className="grow">식후 {durLabel(postMin)} 알람을 받으려면 알림을 켜주세요.</span>
               <button type="button" className="btn-small" onClick={async () => setPush(await enablePush())}>알림 켜기</button>
             </>
           )}
@@ -233,7 +236,7 @@ export default function SugarScreen() {
         {sm}월 {sd}일 ({weekday}) {selHigh > 0 && <span className="muted">· 초과 {selHigh}회</span>}
         {sel !== today() && <button type="button" className="link-btn" onClick={() => { setYm(today().slice(0, 7)); setSel(today()); }}>오늘로</button>}
       </div>
-      <div className="slots">{SLOTS.map(slotRow)}</div>
+      <div className="slots">{SLOTS.filter((s) => s !== 'bedtime' || settings.bedtime || byId.has(sid(sel, s))).map(slotRow)}</div>
 
       <input ref={camRef} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { onPhoto(e.target.files?.[0]); e.target.value = ''; }} />
       <input ref={albumRef} type="file" accept="image/*" hidden onChange={(e) => { onPhoto(e.target.files?.[0]); e.target.value = ''; }} />
@@ -241,10 +244,11 @@ export default function SugarScreen() {
       <Keypad
         target={keypad}
         current={keypad ? byId.get(sid(keypad.date, keypad.slot)) : undefined}
-        targetValue={keypad?.slot === 'fasting' ? settings.targetFasting : settings.targetPost}
+        targetValue={keypad ? targetOf(settings, keypad.slot) : settings.targetPost}
+        postMin={postMin}
         onClose={() => setKeypad(null)}
       />
-      <EditSheet rec={editing} targets={settings} onClose={() => setEditing(null)} />
+      <EditSheet rec={editing} settings={settings} onClose={() => setEditing(null)} />
     </div>
   );
 }
@@ -264,7 +268,7 @@ function PhotoThumb({ id, onClick }: { id?: string | null; onClick?: () => void 
 }
 
 /** 큰 숫자 키패드: 확인 누르면 바로 저장 */
-function Keypad({ target, current, targetValue, onClose }: { target: { slot: Slot; date: string } | null; current?: Sugar; targetValue: number; onClose: () => void }) {
+function Keypad({ target, current, targetValue, postMin, onClose }: { target: { slot: Slot; date: string } | null; current?: Sugar; targetValue: number; postMin: number; onClose: () => void }) {
   const toast = useToast();
   const [v, setV] = useState('');
   useEffect(() => {
@@ -291,7 +295,7 @@ function Keypad({ target, current, targetValue, onClose }: { target: { slot: Slo
         run: async () => {
           if (prev) {
             await save('sugar', id, { ...prev, value: prev.value ?? null });
-            if (prev.value == null && prev.measureAt && slot !== 'fasting') await setAlarm(id, prev.measureAt, `${SLOT_LABEL[slot]} 식후 2시간 혈당`, `${hm(prev.measureAt)} 측정 시간이에요`);
+            if (prev.value == null && prev.measureAt && !isNumOnly(slot)) await setAlarm(id, prev.measureAt, postTitle(slot, postMin), `${hm(prev.measureAt)} 측정 시간이에요`);
           } else await remove('sugar', id);
         },
       },
@@ -301,7 +305,7 @@ function Keypad({ target, current, targetValue, onClose }: { target: { slot: Slo
   return (
     <Sheet open onClose={onClose}>
       <div className="sheet-head">
-        <div className="sheet-title">{slot === 'fasting' ? '공복 혈당' : `${SLOT_LABEL[slot]} 식후 2시간`}</div>
+        <div className="sheet-title">{isNumOnly(slot) ? `${SLOT_LABEL[slot]} 혈당` : `${SLOT_LABEL[slot]} 식후 ${durLabel(current?.mealAt && current?.measureAt ? Math.round((current.measureAt - current.mealAt) / 60000) : postMin)}`}</div>
         <div className="muted">{current?.measureAt ? `${hm(current.measureAt)} 측정` : date === today() ? '지금' : date.slice(5).replace('-', '/')}</div>
       </div>
       <div className="kp-display" aria-live="polite">
@@ -322,7 +326,7 @@ function Keypad({ target, current, targetValue, onClose }: { target: { slot: Slo
 }
 
 /** 기록 수정: 사진/수치/시간/메모/삭제 */
-function EditSheet({ rec, targets, onClose }: { rec: Sugar | null; targets: { targetFasting: number; targetPost: number }; onClose: () => void }) {
+function EditSheet({ rec, settings, onClose }: { rec: Sugar | null; settings: Settings; onClose: () => void }) {
   const toast = useToast();
   const [value, setValue] = useState('');
   const [mealT, setMealT] = useState('');
@@ -344,8 +348,10 @@ function EditSheet({ rec, targets, onClose }: { rec: Sugar | null; targets: { ta
   }, [rec]);
 
   if (!rec) return null;
-  const meal = rec.slot !== 'fasting';
-  const target = meal ? targets.targetPost : targets.targetFasting;
+  const meal = !isNumOnly(rec.slot);
+  const target = targetOf(settings, rec.slot);
+  const postMin = settings.postMealMin || 120;
+  const gapMin = rec.mealAt && rec.measureAt ? Math.round((rec.measureAt - rec.mealAt) / 60000) : postMin;
   const num = value === '' ? null : Number(value);
 
   const changePhoto = async (file?: File | null) => {
@@ -363,11 +369,11 @@ function EditSheet({ rec, targets, onClose }: { rec: Sugar | null; targets: { ta
   const submit = async () => {
     const mealAt = meal && mealT ? toTs(rec.date, mealT) : null;
     let measureAt = measureT ? toTs(rec.date, measureT) : null;
-    // 식사 시간을 바꾸고 측정 시간은 그대로면 2시간 뒤로 맞춰줌
-    if (meal && mealAt && mealT !== hm(rec.mealAt) && measureT === hm(rec.measureAt)) measureAt = mealAt + TWO_H;
+    // 식사 시간을 바꾸고 측정 시간은 그대로면 설정한 간격만큼 뒤로 맞춰줌
+    if (meal && mealAt && mealT !== hm(rec.mealAt) && measureT === hm(rec.measureAt)) measureAt = mealAt + postMin * 60000;
     await save('sugar', rec.id, { value: num, mealAt, measureAt, memo, photoId: photoId || null });
     if (rec.photoId && rec.photoId !== photoId) await removePhoto(rec.photoId);
-    if (meal && num == null && measureAt) await setAlarm(rec.id, measureAt, `${SLOT_LABEL[rec.slot]} 식후 2시간 혈당`, `${hm(measureAt)} 측정 시간이에요`);
+    if (meal && num == null && measureAt) await setAlarm(rec.id, measureAt, postTitle(rec.slot, mealAt ? Math.round((measureAt - mealAt) / 60000) : postMin), `${hm(measureAt)} 측정 시간이에요`);
     else await cancelAlarm(rec.id);
     toast('저장했어요');
     onClose();
@@ -395,7 +401,7 @@ function EditSheet({ rec, targets, onClose }: { rec: Sugar | null; targets: { ta
             <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => { changePhoto(e.target.files?.[0]); e.target.value = ''; }} />
           </div>
         )}
-        <Field label={meal ? '식후 2시간 혈당' : '공복 혈당'} htmlFor="sg-val">
+        <Field label={meal ? `식후 ${durLabel(gapMin)} 혈당` : `${SLOT_LABEL[rec.slot]} 혈당`} htmlFor="sg-val">
           <div className="inline">
             <input id="sg-val" className={'fld big' + (num != null && num >= target ? ' hi' : '')} inputMode="numeric" pattern="[0-9]*" value={value} onChange={(e) => setValue(e.target.value.replace(/\D/g, '').slice(0, 3))} />
             <span className="muted">mg/dL · 목표 {target} 미만</span>

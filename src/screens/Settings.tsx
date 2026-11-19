@@ -3,12 +3,13 @@ import { signOut } from 'firebase/auth';
 import { useStore } from '../App';
 import { auth } from '../firebase';
 import { session } from '../session';
-import { AdminCodesPanel, FamilyPanel } from './Family';
+import { AdminFamiliesPanel, FamilyPanel } from './Family';
 import { saveSettings } from '../data';
 import { enablePush, pushState, PushState, testLocalNotification } from '../push';
 import { Field, Icon, Seg, useToast } from '../ui';
 import { AlarmMode, getAlarmMode, openPhoneAlarm, phoneAlarmSupported, runShortcutTest, setAlarmMode, SHORTCUT_NAME } from '../phoneAlarm';
-import { isIOS } from '../util';
+import { durLabel, isIOS } from '../util';
+import { POST_MEAL_OPTIONS } from '../types';
 
 const PUSH_TEXT: Record<PushState, string> = {
   on: '켜짐',
@@ -31,7 +32,7 @@ export default function SettingsScreen() {
   }, []);
   useEffect(() => setF(settings), [settings]);
 
-  const saveNum = (key: 'targetFasting' | 'targetPost' | 'starMax', v: string) => {
+  const saveNum = (key: 'targetFasting' | 'targetPost' | 'targetBedtime' | 'starMax', v: string) => {
     const n = Number(v);
     if (n > 0) saveSettings({ [key]: n });
   };
@@ -64,18 +65,39 @@ export default function SettingsScreen() {
         <Field label="출산 예정일" htmlFor="st-due">
           <input id="st-due" className="fld" type="date" value={f.dueDate} onChange={(e) => { setF({ ...f, dueDate: e.target.value }); if (e.target.value) saveSettings({ dueDate: e.target.value }); }} />
         </Field>
+        <Field label="홈에 보일 중요 항목 수" htmlFor="st-star">
+          <input id="st-star" className="fld" inputMode="numeric" value={f.starMax} onChange={(e) => setF({ ...f, starMax: Number(e.target.value.replace(/\D/g, '')) })} onBlur={(e) => saveNum('starMax', e.target.value)} />
+        </Field>
+      </section>
+
+      <section className="panel form">
+        <div className="t">혈당</div>
+        <Field label="식후 측정 알람 (식사 사진 올린 시각부터)">
+          <Seg
+            items={POST_MEAL_OPTIONS.map((m) => ({ key: String(m), label: m === 120 ? `${durLabel(m)} (기본)` : durLabel(m) }))}
+            value={String(f.postMealMin || 120)}
+            onChange={(v) => { setF({ ...f, postMealMin: Number(v) }); saveSettings({ postMealMin: Number(v) }); }}
+          />
+        </Field>
+        <div className="hint">병원에서 안내받은 시간에 맞춰 주세요. 바꾸면 이후에 올리는 사진부터 적용돼요.</div>
+        <label className="toggle-line big">
+          <input id="st-bed" type="checkbox" checked={!!f.bedtime} onChange={(e) => { setF({ ...f, bedtime: e.target.checked }); saveSettings({ bedtime: e.target.checked }); }} />
+          <span className="grow"><b>자기 전 측정 추가</b><br /><span className="muted small">켜면 하루 5번 재요. 숫자만 입력해요.</span></span>
+        </label>
         <div className="two">
           <Field label="공복 목표 (미만)" htmlFor="st-f">
             <input id="st-f" className="fld" inputMode="numeric" value={f.targetFasting} onChange={(e) => setF({ ...f, targetFasting: Number(e.target.value.replace(/\D/g, '')) })} onBlur={(e) => saveNum('targetFasting', e.target.value)} />
           </Field>
-          <Field label="식후 2시간 목표 (미만)" htmlFor="st-p">
+          <Field label="식후 목표 (미만)" htmlFor="st-p">
             <input id="st-p" className="fld" inputMode="numeric" value={f.targetPost} onChange={(e) => setF({ ...f, targetPost: Number(e.target.value.replace(/\D/g, '')) })} onBlur={(e) => saveNum('targetPost', e.target.value)} />
           </Field>
         </div>
-        <div className="hint">병원에서 받은 기준이 다르면 여기서 바꿔주세요. 달력 색과 '높음' 표시가 이 값을 따라요.</div>
-        <Field label="홈에 보일 중요 항목 수" htmlFor="st-star">
-          <input id="st-star" className="fld" inputMode="numeric" value={f.starMax} onChange={(e) => setF({ ...f, starMax: Number(e.target.value.replace(/\D/g, '')) })} onBlur={(e) => saveNum('starMax', e.target.value)} />
-        </Field>
+        {f.bedtime && (
+          <Field label="자기 전 목표 (미만)" htmlFor="st-b">
+            <input id="st-b" className="fld" inputMode="numeric" value={f.targetBedtime || f.targetPost} onChange={(e) => setF({ ...f, targetBedtime: Number(e.target.value.replace(/\D/g, '')) })} onBlur={(e) => saveNum('targetBedtime', e.target.value)} />
+          </Field>
+        )}
+        <div className="hint">병원에서 받은 기준이 다르면 바꿔주세요. 달력 색과 '높음' 표시가 이 값을 따라요.</div>
       </section>
 
       <section className="panel">
@@ -141,7 +163,7 @@ export default function SettingsScreen() {
         <div className="hint">2주가 지나면 홈에 백업 알림이 떠요.</div>
       </section>
 
-      <AdminCodesPanel />
+      <AdminFamiliesPanel />
 
       <section className="panel">
         <div className="panel-row">
