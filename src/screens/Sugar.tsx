@@ -4,7 +4,7 @@ import { cancelAlarm, remove, removePhoto, save, savePhoto, setAlarm, usePhoto, 
 import { compressImage, shareToAlbum } from '../image';
 import { enablePush, pushState, PushState } from '../push';
 import { isNumOnly, SLOT_LABEL, SLOTS, Settings, Slot, Sugar } from '../types';
-import { downloadIcs, durLabel, hm, isIOS, pad, remain, toTs, today, ymd } from '../util';
+import { calendarBrowsers, downloadIcs, durLabel, hm, isInAppBrowser, isIOS, pad, remain, toTs, today, ymd } from '../util';
 import { DeleteButton, Field, Icon, PhotoViewer, Sheet, useToast } from '../ui';
 import { getAlarmMode, openPhoneAlarm, phoneAlarmSupported } from '../phoneAlarm';
 import { ShortcutHowto } from './ShortcutHowto';
@@ -63,6 +63,27 @@ export default function SugarScreen() {
   const [sy, sm, sd] = sel.split('-').map(Number);
   const weekday = '일월화수목금토'[new Date(sy, sm - 1, sd).getDay()];
 
+  // 캘린더 추가: 앱 안 브라우저(네이버·카톡 등)에서는 파일만 받아지므로 안내만
+  const addToCalendar = (title: string, at: number) => {
+    if (isInAppBrowser()) {
+      toast(`이 브라우저에서는 캘린더 추가가 안 돼요. ${calendarBrowsers()}에서 열어주세요.`, [
+        {
+          label: '주소 복사',
+          run: async () => {
+            try {
+              await navigator.clipboard.writeText(location.origin);
+              toast(`주소를 복사했어요. ${calendarBrowsers()}에 붙여넣어 주세요.`);
+            } catch {
+              toast(location.origin, [], 8000);
+            }
+          },
+        },
+      ], 9000);
+      return;
+    }
+    downloadIcs(title, at);
+  };
+
   // 사진 찍기 → 자동 저장 + 설정한 시간 뒤 알람
   const openCamera = (slot: Slot, album = false) => {
     pickSlot.current = slot;
@@ -103,7 +124,7 @@ export default function SugarScreen() {
       const mode = getAlarmMode();
       const phoneLabel = `${SLOT_LABEL[slot]} 혈당 측정`;
       // 캘린더·폰 알람 둘 다 고를 수 있게
-      if (needAlarm) actions.push({ label: '캘린더', run: async () => downloadIcs(postTitle(slot, postMin), measureAt!) });
+      if (needAlarm) actions.push({ label: '캘린더', run: async () => addToCalendar(postTitle(slot, postMin), measureAt!) });
       if (needAlarm && phoneAlarmSupported() && mode !== 'auto') actions.push({ label: '폰 알람', run: async () => { openPhoneAlarm(measureAt!, phoneLabel); } });
       toast(hasValue ? '사진을 바꿨어요' : needAlarm ? `저장 · ${hm(measureAt)} 측정` : '사진을 저장했어요', actions, 9000);
       if (needAlarm && mode === 'auto') setTimeout(() => openPhoneAlarm(measureAt!, phoneLabel), 600);
@@ -253,7 +274,7 @@ export default function SugarScreen() {
             <div className="sheet-title">{SLOT_LABEL[alarmFor.slot]} 측정 알람</div>
             <div className="muted">{hm(alarmFor.due)} · {remain(alarmFor.due)}</div>
           </div>
-          <button type="button" className="btn-primary" onClick={() => { downloadIcs(postTitle(alarmFor.slot, postMin), alarmFor.due); setAlarmFor(null); }}>캘린더에 추가</button>
+          <button type="button" className="btn-primary" onClick={() => { addToCalendar(postTitle(alarmFor.slot, postMin), alarmFor.due); setAlarmFor(null); }}>캘린더에 추가</button>
           {phoneAlarmSupported() && (
             <button type="button" className="btn-ghost" onClick={() => { openPhoneAlarm(alarmFor.due, `${SLOT_LABEL[alarmFor.slot]} 혈당 측정`); setAlarmFor(null); }}>폰 알람 (단축어)</button>
           )}

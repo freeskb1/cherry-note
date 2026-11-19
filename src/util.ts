@@ -112,3 +112,15 @@ export function durLabel(min: number): string {
   const m = min % 60;
   return [h ? `${h}시간` : '', m ? `${m}분` : ''].filter(Boolean).join(' ') || '0분';
 }
+
+/** 네이버·카카오톡·인스타 등 앱 안의 브라우저인지 (캘린더 파일을 캘린더로 못 넘김) */
+export function isInAppBrowser(): boolean {
+  return /NAVER|KAKAOTALK|Instagram|FBAN|FBAV|FB_IAB|Line\/|DaumApps|everytimeApp|BAND\/|; wv\)/i.test(navigator.userAgent);
+}
+
+/** 이 폰에서 캘린더 추가가 되는 브라우저 이름 */
+export function calendarBrowsers(): string {
+  if (isIOS()) return '사파리';
+  if (/Android/i.test(navigator.userAgent)) return '크롬이나 삼성 인터넷';
+  return '크롬·엣지·사파리';
+}
