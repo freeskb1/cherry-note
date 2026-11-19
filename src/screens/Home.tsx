@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useStore, Tab } from '../App';
-import { auth, nameOf } from '../firebase';
+import { session } from '../session';
 import { useSugarMonth } from '../data';
 import { ADMIN_STATUS, SHOP_STATUS, SLOT_LABEL } from '../types';
 import { dday, hm, remain, today } from '../util';
@@ -16,7 +16,8 @@ export default function Home() {
     return () => clearInterval(t);
   }, []);
 
-  const d = dday(settings.dueDate);
+  const d = settings.dueDate ? dday(settings.dueDate) : null;
+  const baby = settings.babyName || '아기';
   const sugar = useSugarMonth(today().slice(0, 7));
   const pending = sugar
     .filter((s) => s.date === today() && s.slot !== 'fasting' && s.mealAt && (s.value === null || s.value === undefined))
@@ -36,24 +37,33 @@ export default function Home() {
   return (
     <div className="page">
       <header className="home-head">
-        <div className="brand">체리 준비노트</div>
+        <div className="brand">{settings.babyName ? `${settings.babyName} 준비노트` : '출산 준비노트'}</div>
         <div className="head-right">
-          <span className="who">{nameOf(auth.currentUser?.email)}</span>
+          <span className="who">{session.name}</span>
           <a href="#/settings" className="icon-btn" aria-label="설정"><Icon name="gear" size={20} /></a>
         </div>
       </header>
 
-      <section className="dday">
-        <div>
-          <div className="dday-sub">체리 만나기까지</div>
-          <div className="dday-num">{d.left > 0 ? `D-${d.left}` : d.left === 0 ? 'D-DAY' : `D+${-d.left}`}</div>
-        </div>
-        <div className="dday-right">
-          {settings.dueDate.replace(/-/g, '.')} 예정
-          <br />
-          {d.left >= 0 && `${d.week}주 ${d.day}일`}
-        </div>
-      </section>
+      {d ? (
+        <section className="dday">
+          <div>
+            <div className="dday-sub">{baby} 만나기까지</div>
+            <div className="dday-num">{d.left > 0 ? `D-${d.left}` : d.left === 0 ? 'D-DAY' : `D+${-d.left}`}</div>
+          </div>
+          <div className="dday-right">
+            {settings.dueDate.replace(/-/g, '.')} 예정
+            <br />
+            {d.left >= 0 && `${d.week}주 ${d.day}일`}
+          </div>
+        </section>
+      ) : (
+        <a className="dday empty-dday" href="#/settings">
+          <div>
+            <div className="dday-sub">출산 예정일을 알려주세요</div>
+            <div className="dday-num small-num">설정에서 입력</div>
+          </div>
+        </a>
+      )}
 
       <div className="menus">
         <a className="menu-tile" href="#/shop"><span className="ico tint-shop"><Icon name="bag" size={20} /></span>용품 준비</a>

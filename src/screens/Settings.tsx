@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { signOut } from 'firebase/auth';
 import { useStore } from '../App';
-import { auth, nameOf } from '../firebase';
+import { auth } from '../firebase';
+import { session } from '../session';
+import { AdminCodesPanel, FamilyPanel } from './Family';
 import { saveSettings } from '../data';
 import { enablePush, pushState, PushState, testLocalNotification } from '../push';
 import { Field, Icon, Seg, useToast } from '../ui';
@@ -53,7 +55,12 @@ export default function SettingsScreen() {
         <h1 className="grow">설정</h1>
       </div>
 
+      <FamilyPanel />
+
       <section className="panel form">
+        <Field label="태명" htmlFor="st-baby">
+          <input id="st-baby" className="fld" maxLength={10} value={f.babyName} onChange={(e) => setF({ ...f, babyName: e.target.value })} onBlur={(e) => saveSettings({ babyName: e.target.value.trim() })} />
+        </Field>
         <Field label="출산 예정일" htmlFor="st-due">
           <input id="st-due" className="fld" type="date" value={f.dueDate} onChange={(e) => { setF({ ...f, dueDate: e.target.value }); if (e.target.value) saveSettings({ dueDate: e.target.value }); }} />
         </Field>
@@ -103,7 +110,7 @@ export default function SettingsScreen() {
               value={alarmMode}
               onChange={(m) => { setAlarmModeState(m); setAlarmMode(m); }}
             />
-            <button type="button" className="btn-ghost" onClick={() => { const ok = isIOS() ? runShortcutTest() : openPhoneAlarm(Date.now() + 2 * 60000, '체리 알람 테스트'); if (!ok) toast('이 폰에서는 열 수 없어요'); }}>
+            <button type="button" className="btn-ghost" onClick={() => { const ok = isIOS() ? runShortcutTest() : openPhoneAlarm(Date.now() + 2 * 60000, '알람 테스트'); if (!ok) toast('이 폰에서는 열 수 없어요'); }}>
               {isIOS() ? '테스트: 단축어 실행해보기' : '테스트: 2분 뒤 알람 맞추기'}
             </button>
             {isIOS() && (
@@ -134,10 +141,12 @@ export default function SettingsScreen() {
         <div className="hint">2주가 지나면 홈에 백업 알림이 떠요.</div>
       </section>
 
+      <AdminCodesPanel />
+
       <section className="panel">
         <div className="panel-row">
           <div className="grow">
-            <div className="t">{nameOf(auth.currentUser?.email)}</div>
+            <div className="t">{session.name}</div>
             <div className="muted small">{auth.currentUser?.email}</div>
           </div>
           <button type="button" className="btn-small ghost" onClick={() => signOut(auth)}>로그아웃</button>

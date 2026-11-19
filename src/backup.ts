@@ -1,13 +1,14 @@
 import * as XLSX from 'xlsx';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from './firebase';
+import { hp } from './session';
 import { saveSettings } from './data';
 import { ADMIN_STATUS, AdminStatus, PERIOD, Period, SHOP_STATUS, SLOT_LABEL, ShopStatus, Slot } from './types';
 import { downloadBlob, hm, today } from './util';
 
 type Row = Record<string, any>;
 async function all(name: string): Promise<Row[]> {
-  const snap = await getDocs(collection(db, name));
+  const snap = await getDocs(collection(db, hp(name)));
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Row);
 }
 
@@ -57,7 +58,7 @@ export async function backupExcel() {
     '혈당 일지'
   );
   const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-  downloadBlob(new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `체리노트_백업_${today()}.xlsx`);
+  downloadBlob(new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `준비노트_백업_${today()}.xlsx`);
   await saveSettings({ lastBackupAt: Date.now() });
 }
 
@@ -66,6 +67,6 @@ export async function backupJson() {
   const names = ['items', 'notes', 'admin', 'sugar', 'photos', 'meta'];
   const data: Record<string, unknown> = { exportedAt: new Date().toISOString() };
   for (const n of names) data[n] = await all(n);
-  downloadBlob(new Blob([JSON.stringify(data)], { type: 'application/json' }), `체리노트_전체백업_${today()}.json`);
+  downloadBlob(new Blob([JSON.stringify(data)], { type: 'application/json' }), `준비노트_전체백업_${today()}.json`);
   await saveSettings({ lastBackupAt: Date.now() });
 }

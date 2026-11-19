@@ -1,6 +1,6 @@
 {
-  "name": "체리 준비노트",
-  "short_name": "체리노트",
+  "name": "출산 준비노트",
+  "short_name": "준비노트",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

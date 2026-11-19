@@ -334,3 +334,22 @@ select.fld { appearance: none; background-image: linear-gradient(45deg, transpar
 .viewer-x { position: absolute; top: calc(12px + env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); width: 44px; height: 44px; border-radius: 50%; border: none; background: rgba(255,255,255,0.15); color: #fff; display: flex; align-items: center; justify-content: center; }
 .slot-bell { width: 44px; height: 44px; border-radius: 10px; border: 1px solid var(--line-strong); background: var(--card); color: var(--accent); display: flex; align-items: center; justify-content: center; flex: none; }
 .photo-btn { border: none; padding: 0; background: none; border-radius: 12px; overflow: hidden; }
+
+.empty-dday { text-decoration: none; }
+.small-num { font-size: 22px; }
+.auth-seg { width: 100%; max-width: 340px; }
+.link-btn.center { margin: 0 auto; }
+.hint.center { text-align: center; max-width: 340px; }
+.ob-choices { width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 10px; }
+.ob-card { text-align: left; border: 1px solid var(--line-strong); background: var(--card); color: var(--fg); border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; }
+.ob-card b { font-size: 15px; }
+.ob-card span { font-size: 12px; color: var(--muted); line-height: 1.5; }
+.ob-card.accent { border-color: var(--accent); }
+.ob-form { width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 12px; text-align: left; }
+.fld.code { letter-spacing: 0.2em; font-weight: 700; text-transform: uppercase; }
+.code-box { display: flex; align-items: center; gap: 8px; background: var(--sunk); border-radius: 12px; padding: 10px 12px; }
+.code-box .code-text { font-size: 22px; font-weight: 700; letter-spacing: 0.15em; font-variant-numeric: tabular-nums; flex: 1; }
+.member-row { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.code-list { display: flex; flex-direction: column; gap: 6px; }
+.code-item { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 8px 10px; border-radius: 10px; background: var(--sunk); }
+.code-item .mono { font-weight: 700; letter-spacing: 0.1em; }

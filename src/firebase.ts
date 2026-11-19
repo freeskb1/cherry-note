@@ -19,18 +19,3 @@ export const auth = getAuth(app);
 export const db = initializeFirestore(app, {
   localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
 });
-
-const names: Record<string, string> = {};
-String(env.VITE_USER_NAMES || '')
-  .split(',')
-  .map((s: string) => s.trim())
-  .filter(Boolean)
-  .forEach((pair: string) => {
-    const [email, name] = pair.split(':');
-    if (email && name) names[email.trim().toLowerCase()] = name.trim();
-  });
-
-export function nameOf(email?: string | null): string {
-  if (!email) return '';
-  return names[email.toLowerCase()] || email.split('@')[0];
-}

@@ -72,6 +72,7 @@ export interface Sugar {
 }
 
 export interface Settings {
+  babyName: string;
   dueDate: string;
   targetFasting: number;
   targetPost: number;
@@ -80,7 +81,8 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  dueDate: '2027-01-21',
+  babyName: '',
+  dueDate: '',
   targetFasting: 95,
   targetPost: 120,
   starMax: 6,
@@ -90,4 +92,12 @@ export const DEFAULT_SETTINGS: Settings = {
 export interface Lists {
   shopCategories: string[];
   noteTags: string[];
+}
+
+export interface Household {
+  id: string;
+  members: string[];
+  names: Record<string, string>;
+  createdAt?: number;
+  createdBy?: string;
 }

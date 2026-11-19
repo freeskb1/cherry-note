@@ -1,18 +1,115 @@
 rules_version = '2';
 
-// 두 사람 이메일만 읽기/쓰기 허용. 아래 두 주소를 실제 로그인 이메일로 바꾸세요.
+// ─────────────────────────────────────────────────────────────
+// 출산 준비노트 보안 규칙
+// 바꿀 곳 2군데:
+//   ADMINS : 가입 코드를 만들 수 있는 관리자 이메일
+//   LEGACY : 예전(공용) 데이터를 우리 집으로 옮길 수 있는 두 사람 이메일
+// ─────────────────────────────────────────────────────────────
 service cloud.firestore {
   match /databases/{database}/documents {
-    function allowed() {
-      return request.auth != null
-        && request.auth.token.email in [
-          'gwangbae@example.com',
-          'minju@example.com'
-        ];
+
+    function ADMINS() { return ['freeskb@naver.com']; }
+    function LEGACY() { return ['freeskb@naver.com', '민주님이메일@example.com']; }
+
+    function signedIn() { return request.auth != null; }
+    function uid() { return request.auth.uid; }
+    function isAdmin() { return signedIn() && request.auth.token.email in ADMINS(); }
+    function isLegacy() { return signedIn() && request.auth.token.email in LEGACY(); }
+    function isMember(hid) {
+      return signedIn() && hid is string
+        && exists(/databases/$(database)/documents/households/$(hid))
+        && uid() in get(/databases/$(database)/documents/households/$(hid)).data.members;
     }
 
-    match /{document=**} {
-      allow read, write: if allowed();
+    // 내 계정 정보 (어느 집에 속했는지)
+    match /users/{u} {
+      allow read, write: if signedIn() && uid() == u;
     }
+
+    // 집: 멤버만 읽기. 최대 2명
+    match /households/{hid} {
+      allow get: if isMember(hid);
+
+      // 새 집: 나 혼자 멤버로, 가입 코드를 같이 사용 처리해야 함 (기존 사용자는 코드 없이)
+      allow create: if signedIn()
+        && request.resource.data.members == [uid()]
+        && request.resource.data.keys().hasOnly(['members', 'names', 'createdAt', 'createdBy', 'signupCode'])
+        && (isLegacy() || signupOk(request.resource.data.signupCode, hid));
+
+      // 멤버: 내 이름만 수정 / 초대받은 사람: 초대 코드로 자기 자신만 추가
+      allow update: if (isMember(hid)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['names'])
+          && request.resource.data.names.diff(resource.data.names).affectedKeys().hasOnly([uid()]))
+        || joinOk(hid);
+
+      allow delete: if false;
+
+      // 집 안의 모든 목록·사진·설정: 멤버만
+      match /{col}/{rest=**} {
+        allow read, write: if isMember(hid);
+      }
+    }
+
+    function signupOk(code, hid) {
+      return code is string
+        && get(/databases/$(database)/documents/signupCodes/$(code)).data.usedBy == null
+        && getAfter(/databases/$(database)/documents/signupCodes/$(code)).data.usedBy == uid()
+        && getAfter(/databases/$(database)/documents/signupCodes/$(code)).data.householdId == hid;
+    }
+
+    function joinOk(hid) {
+      let code = request.resource.data.joinedVia;
+      let inv = get(/databases/$(database)/documents/invites/$(code)).data;
+      return signedIn()
+        && !(uid() in resource.data.members)
+        && resource.data.members.size() == 1
+        && request.resource.data.members == resource.data.members.concat([uid()])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members', 'names', 'joinedVia'])
+        && request.resource.data.names.diff(resource.data.names).affectedKeys().hasOnly([uid()])
+        && inv.householdId == hid
+        && inv.expiresAt > request.time.toMillis();
+    }
+
+    // 배우자 초대 코드 (6자리, 72시간)
+    match /invites/{code} {
+      allow get: if signedIn();
+      allow create: if isMember(request.resource.data.householdId)
+        && request.resource.data.createdBy == uid();
+      allow delete: if signedIn() && isMember(resource.data.householdId);
+    }
+
+    // 관리자가 만드는 가입 코드 (8자리)
+    match /signupCodes/{code} {
+      allow get: if signedIn();
+      allow list, create, delete: if isAdmin();
+      allow update: if isAdmin() || (signedIn()
+        && resource.data.usedBy == null
+        && request.resource.data.usedBy == uid()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usedBy', 'usedAt', 'householdId', 'usedEmail'])
+        && existsAfter(/databases/$(database)/documents/households/$(request.resource.data.householdId)));
+    }
+
+    // 2시간 후 푸시 예약: 그 집 멤버만
+    match /alarms/{id} {
+      allow read: if signedIn() && isMember(resource.data.householdId);
+      allow create: if isMember(request.resource.data.householdId);
+      allow update: if isMember(request.resource.data.householdId) && isMember(resource.data.householdId);
+      allow delete: if signedIn() && (resource == null || isMember(resource.data.householdId));
+    }
+
+    // 폰별 푸시 토큰
+    match /tokens/{id} {
+      allow create, update: if isMember(request.resource.data.householdId) && request.resource.data.uid == uid();
+      allow delete: if signedIn() && (resource == null || resource.data.uid == uid());
+    }
+
+    // 예전 공용 데이터: 기존 두 사람만 읽기 (이전이 끝나면 지워도 됨)
+    match /items/{d}  { allow read, delete: if isLegacy(); }
+    match /notes/{d}  { allow read, delete: if isLegacy(); }
+    match /admin/{d}  { allow read, delete: if isLegacy(); }
+    match /sugar/{d}  { allow read, delete: if isLegacy(); }
+    match /photos/{d} { allow read, delete: if isLegacy(); }
+    match /meta/{d}   { allow read, write: if isLegacy(); }
   }
 }

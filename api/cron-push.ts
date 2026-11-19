@@ -1,5 +1,5 @@
 // Vercel 서버리스 함수: cron-job.org가 1분마다 호출
-// alarms 컬렉션에서 시간이 된 알람을 찾아 두 사람 폰으로 푸시를 보내고 지운다.
+// alarms 컬렉션에서 시간이 된 알람을 찾아 그 집 두 사람 폰으로 푸시를 보내고 지운다.
 import { cert, getApps, initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getMessaging } from 'firebase-admin/messaging';
@@ -28,12 +28,15 @@ export default async function handler(req: any, res: any) {
       return;
     }
 
-    const tokenDocs = (await db.collection('tokens').get()).docs;
-    const tokens = tokenDocs.map((d) => d.get('token') as string).filter(Boolean);
     let sent = 0;
 
     for (const alarm of due.docs) {
       const a = alarm.data();
+      // 그 집 사람들 폰으로만 보냄 (집 정보가 없는 예전 알람은 보내지 않고 정리)
+      const tokenDocs = a.householdId
+        ? (await db.collection('tokens').where('householdId', '==', a.householdId).get()).docs
+        : [];
+      const tokens = tokenDocs.map((d) => d.get('token') as string).filter(Boolean);
       if (tokens.length && now - a.fireAt < LATE_LIMIT_MS) {
         const r = await getMessaging().sendEachForMulticast({
           tokens,

@@ -2,6 +2,7 @@ import { getMessaging, getToken, isSupported } from 'firebase/messaging';
 import { doc, setDoc } from 'firebase/firestore';
 import { app, db } from './firebase';
 import { me } from './data';
+import { session } from './session';
 import { isIOS, isStandalone } from './util';
 
 export type PushState = 'on' | 'off' | 'denied' | 'unsupported' | 'need-install';
@@ -45,8 +46,11 @@ export async function registerToken() {
     serviceWorkerRegistration: reg,
   });
   if (!token) return;
+  if (!session.hid) return;
   await setDoc(doc(db, 'tokens', await tokenId(token)), {
     token,
+    householdId: session.hid,
+    uid: session.uid,
     user: me(),
     ua: navigator.userAgent.slice(0, 160),
     updatedAt: Date.now(),
@@ -57,6 +61,6 @@ export async function registerToken() {
 export async function testLocalNotification() {
   const reg = await navigator.serviceWorker.getRegistration('/sw.js');
   if (!reg) return false;
-  await reg.showNotification('체리 준비노트', { body: '알림이 잘 와요', icon: '/icon-192.png' });
+  await reg.showNotification('출산 준비노트', { body: '알림이 잘 와요', icon: '/icon-192.png' });
   return true;
 }

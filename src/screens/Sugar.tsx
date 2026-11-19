@@ -96,7 +96,7 @@ export default function SugarScreen() {
       if (nav.canShare?.({ files: [file] })) actions.push({ label: '사진첩 저장', run: async () => { await shareToAlbum(file); } });
       const needAlarm = !hasValue && !!measureAt && measureAt > Date.now();
       const mode = getAlarmMode();
-      const phoneLabel = `체리 ${SLOT_LABEL[slot]} 혈당`;
+      const phoneLabel = `${SLOT_LABEL[slot]} 혈당 측정`;
       if (needAlarm && mode !== 'off' && phoneAlarmSupported()) {
         actions.push({ label: '폰 알람', run: async () => { openPhoneAlarm(measureAt!, phoneLabel); } });
       } else if (needAlarm && push !== 'on') {
@@ -159,7 +159,7 @@ export default function SugarScreen() {
             )}
           </button>
           {live && due > now && (getAlarmMode() !== 'off' && phoneAlarmSupported() ? (
-            <button type="button" className="slot-bell" aria-label="폰 알람 다시 맞추기" onClick={() => openPhoneAlarm(due, `체리 ${label} 혈당`)}><Icon name="bell" size={20} /></button>
+            <button type="button" className="slot-bell" aria-label="폰 알람 다시 맞추기" onClick={() => openPhoneAlarm(due, `${label} 혈당 측정`)}><Icon name="bell" size={20} /></button>
           ) : push !== 'on' ? (
             <button type="button" className="slot-bell" aria-label="캘린더에 알람 넣기" onClick={() => downloadIcs(`${label} 식후 2시간 혈당`, due)}><Icon name="bell" size={20} /></button>
           ) : null)}
@@ -407,7 +407,7 @@ function EditSheet({ rec, targets, onClose }: { rec: Sugar | null; targets: { ta
         </div>
         <Field label="메모 (선택)" htmlFor="sg-memo"><input id="sg-memo" className="fld" value={memo} onChange={(e) => setMemo(e.target.value)} /></Field>
         {meal && num == null && measureT && toTs(rec.date, measureT) > Date.now() && getAlarmMode() !== 'off' && phoneAlarmSupported() && !isIOS() && (
-          <button type="button" className="btn-ghost" onClick={() => openPhoneAlarm(toTs(rec.date, measureT), `체리 ${SLOT_LABEL[rec.slot]} 혈당`)}>
+          <button type="button" className="btn-ghost" onClick={() => openPhoneAlarm(toTs(rec.date, measureT), `${SLOT_LABEL[rec.slot]} 혈당 측정`)}>
             {measureT} 폰 알람 맞추기
           </button>
         )}

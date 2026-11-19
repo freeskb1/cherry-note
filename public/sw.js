@@ -7,10 +7,10 @@ self.addEventListener('push', (event) => {
   try {
     payload = event.data ? event.data.json() : {};
   } catch (e) {
-    payload = { data: { title: '체리 준비노트', body: event.data ? event.data.text() : '' } };
+    payload = { data: { title: '출산 준비노트', body: event.data ? event.data.text() : '' } };
   }
   const d = payload.data || payload.notification || payload;
-  const title = d.title || '체리 준비노트';
+  const title = d.title || '출산 준비노트';
   event.waitUntil(
     self.registration.showNotification(title, {
       body: d.body || '',

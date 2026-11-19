@@ -1,13 +1,13 @@
 /**
  * 폰 시계 앱에 "진짜 알람" 맞추기
- * - 아이폰: 단축어 '체리알람'을 실행 (입력: "HH:MM")
+ * - 아이폰: 단축어 '준비노트알람'을 실행 (입력: "HH:MM")
  * - 안드로이드: 시계 앱 알람 설정 인텐트 (기종에 따라 막힐 수 있음)
  * 설정은 폰마다 따로 저장 (localStorage)
  */
 import { isIOS } from './util';
 
 export type AlarmMode = 'off' | 'button' | 'auto';
-export const SHORTCUT_NAME = '체리알람';
+export const SHORTCUT_NAME = '준비노트알람';
 const KEY = 'cherry.alarmMode';
 
 export function getAlarmMode(): AlarmMode {
@@ -63,9 +63,9 @@ export function runShortcutTest(): boolean {
 }
 
 /** 시계 앱 알람/타이머 맞추기. 지난 시각이면 아무것도 안 함
- *  아이폰: 단축어 '체리알람'(타이머 시작 2시간)을 실행 → 사진 찍은 시각 + 2시간
+ *  아이폰: 단축어 '준비노트알람'(타이머 시작 2시간)을 실행 → 사진 찍은 시각 + 2시간
  *  안드로이드: 해당 시각에 알람 */
-export function openPhoneAlarm(at: number, label = '체리 혈당 측정'): boolean {
+export function openPhoneAlarm(at: number, label = '혈당 측정'): boolean {
   if (at <= Date.now()) return false;
   const url = phoneAlarmUrl(at, label);
   if (!url) return false;
