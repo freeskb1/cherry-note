@@ -263,18 +263,28 @@ function Signed({ user }: { user: User }) {
   }, [user.uid]);
 
   const hid = userDoc?.householdId;
+  const [retry, setRetry] = useState(0);
   useEffect(() => {
     if (userDoc === undefined) return;
     if (!hid) {
       setHousehold(null);
       return;
     }
-    return onSnapshot(
+    let timer: number | undefined;
+    const unsub = onSnapshot(
       doc(db, 'households', hid),
       (s) => setHousehold(s.exists() ? ({ id: s.id, ...(s.data() as Omit<Household, 'id'>) } as Household) : null),
-      () => setHousehold(null)
+      () => {
+        // 막 가족에 들어간 직후엔 서버 반영이 늦어 한 번 거절될 수 있음 → 잠시 뒤 다시 읽기 (최대 5번)
+        if (retry < 5) timer = window.setTimeout(() => setRetry((r) => r + 1), 1500);
+        else setHousehold(null);
+      }
     );
-  }, [hid, userDoc]);
+    return () => {
+      unsub();
+      window.clearTimeout(timer);
+    };
+  }, [hid, userDoc, retry]);
 
   if (userDoc === undefined || household === undefined) return <div className="boot" />;
   if (!household) return <NoFamily />;

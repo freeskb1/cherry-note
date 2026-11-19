@@ -203,19 +203,26 @@ export async function joinHousehold(code: string, name: string): Promise<string>
   const inv = await getDoc(doc(db, 'invites', code));
   if (!inv.exists()) throw new Error('가족 코드를 찾을 수 없어요. 다시 확인해 주세요.');
   const hid = inv.get('householdId') as string;
-  const batch = writeBatch(db);
-  batch.update(doc(db, 'households', hid), {
-    members: arrayUnion(u),
-    [`names.${u}`]: name,
-    [`emails.${u}`]: myEmail(),
-    joinedVia: code,
-  });
-  batch.set(doc(db, 'users', u), { householdId: hid, name, email: myEmail() }, { merge: true });
   try {
-    await batch.commit();
+    // 트랜잭션: 서버가 확인해야만 반영돼서, 화면이 먼저 넘어갔다가 되돌아오는 일이 없음
+    await runTransaction(db, async (tx) => {
+      await tx.get(doc(db, 'invites', code));
+      tx.update(doc(db, 'households', hid), {
+        members: arrayUnion(u),
+        [`names.${u}`]: name,
+        [`emails.${u}`]: myEmail(),
+        joinedVia: code,
+      });
+      tx.set(doc(db, 'users', u), { householdId: hid, name, email: myEmail() }, { merge: true });
+    });
   } catch (e: any) {
-    if (String(e?.code || '').includes('permission')) throw new Error('이미 두 명이 모두 들어간 가족이에요.');
-    throw e;
+    // 이미 들어가 있는 경우(예: 앞에서 성공했는데 화면만 안 넘어간 경우)는 연결만 다시
+    if (await isMemberOf(hid)) {
+      await linkUser(hid, name);
+      return hid;
+    }
+    if (String(e?.code || '').includes('permission')) throw new Error('이미 두 명이 모두 들어간 가족이거나, 쓸 수 없는 가족 코드예요.');
+    throw new Error(`들어가지 못했어요 (${e?.code || e?.message || '알 수 없는 오류'})`);
   }
   return hid;
 }
