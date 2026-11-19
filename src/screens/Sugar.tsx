@@ -6,7 +6,7 @@ import { enablePush, pushState, PushState } from '../push';
 import { isNumOnly, SLOT_LABEL, SLOTS, Settings, Slot, Sugar } from '../types';
 import { calendarBrowsers, downloadIcs, durLabel, hm, isInAppBrowser, isIOS, pad, remain, toTs, today, ymd } from '../util';
 import { DeleteButton, Field, Icon, PhotoViewer, Sheet, useToast } from '../ui';
-import { getAlarmMode, openPhoneAlarm, phoneAlarmSupported } from '../phoneAlarm';
+import { getAlarmMode, isShortcutReady, openPhoneAlarm, phoneAlarmSupported, setShortcutReady } from '../phoneAlarm';
 import { ShortcutHowto } from './ShortcutHowto';
 
 const sid = (date: string, slot: Slot) => `${date}_${slot}`;
@@ -24,6 +24,8 @@ export default function SugarScreen() {
   const [keypad, setKeypad] = useState<{ slot: Slot; date: string } | null>(null);
   const [editing, setEditing] = useState<Sugar | null>(null);
   const [alarmFor, setAlarmFor] = useState<{ slot: Slot; due: number } | null>(null);
+  const [howto, setHowto] = useState(false);
+  const [ready, setReady] = useState(isShortcutReady());
   const [shot, setShot] = useState<{
     slot: Slot;
     measureAt: number;
@@ -295,8 +297,25 @@ export default function SugarScreen() {
             {shot.album && (
               <button type="button" className="shot-link" onClick={async () => { await shot.album!(); setShot({ ...shot, done: { ...shot.done, album: true } }); }}>{shot.done.album ? '사진첩 저장 ✓' : '사진첩 저장'}</button>
             )}
+            {phoneAlarmSupported() && !ready && (
+              <button type="button" className="shot-howto" onClick={() => setHowto(true)}>폰 알람 처음이면?</button>
+            )}
           </div>
         </div>
+      )}
+      {howto && (
+        <Sheet open onClose={() => setHowto(false)}>
+          <div className="sheet-title">폰 알람 준비 (처음 한 번만)</div>
+          <div className="hint">폰마다 딱 한 번만 만들면 돼요. 그다음부터는 '폰 알람' 버튼만 누르면 무음에서도 울리는 알람이 맞춰져요.</div>
+          <ShortcutHowto />
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={() => { setShortcutReady(true); setReady(true); setHowto(false); toast('이제 이 안내는 안 보여요. 설정에서 다시 볼 수 있어요'); }}
+          >
+            다 만들었어요
+          </button>
+        </Sheet>
       )}
       {alarmFor && (
         <Sheet open onClose={() => setAlarmFor(null)}>

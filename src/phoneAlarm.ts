@@ -68,3 +68,20 @@ export function openPhoneAlarm(at: number, label = '혈당 측정'): boolean {
 export function testPhoneAlarm(): boolean {
   return openPhoneAlarm(Date.now() + 60_000 + 1000, '알람 테스트');
 }
+
+const SETUP_KEY = 'cherry.shortcutReady';
+export function isShortcutReady(): boolean {
+  try {
+    return localStorage.getItem(SETUP_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+export function setShortcutReady(v: boolean) {
+  try {
+    if (v) localStorage.setItem(SETUP_KEY, '1');
+    else localStorage.removeItem(SETUP_KEY);
+  } catch {
+    /* 무시 */
+  }
+}

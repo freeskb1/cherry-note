@@ -7,7 +7,7 @@ import { AdminFamiliesPanel, FamilyPanel } from './Family';
 import { saveSettings } from '../data';
 import { enablePush, pushState, PushState, testLocalNotification } from '../push';
 import { Field, Icon, Seg, useToast } from '../ui';
-import { AlarmMode, getAlarmMode, phoneAlarmSupported, setAlarmMode } from '../phoneAlarm';
+import { AlarmMode, getAlarmMode, phoneAlarmSupported, setAlarmMode, setShortcutReady } from '../phoneAlarm';
 import { ShortcutHowto } from './ShortcutHowto';
 import { durLabel, isIOS } from '../util';
 import { POST_MEAL_OPTIONS } from '../types';
@@ -128,6 +128,11 @@ export default function SettingsScreen() {
         )}
         <ShortcutHowto />
         <div className="hint">이 설정은 폰마다 따로예요. '자동'은 단축어를 만든 폰에서만 켜주세요.</div>
+        {phoneAlarmSupported() && (
+          <button type="button" className="link-btn" onClick={() => { setShortcutReady(false); toast('사진 저장 화면에 "폰 알람 처음이면?"을 다시 보여드릴게요'); }}>
+            사진 저장 화면에 안내 다시 보이기
+          </button>
+        )}
       </section>
 
       <section className="panel">
