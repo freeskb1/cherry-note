@@ -2,7 +2,7 @@ rules_version = '2';
 
 // ─────────────────────────────────────────────────────────────
 // 출산 준비노트 보안 규칙
-// 바꿀 곳: LEGACY 의 '민주님이메일' 을 민주님 로그인 이메일로
+// 이메일이 바뀌면 아래 ADMINS, LEGACY 만 고치면 돼요
 //   ADMINS : 사용 중인 가족 목록을 볼 수 있는 관리자
 //   LEGACY : 예전(공용) 기록을 쓰던 두 사람. 첫 로그인 때 자동으로 같은 가족으로 옮겨져요
 // ─────────────────────────────────────────────────────────────
@@ -10,7 +10,7 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     function ADMINS() { return ['freeskb@naver.com']; }
-    function LEGACY() { return ['freeskb@naver.com', '민주님이메일@example.com']; }
+    function LEGACY() { return ['freeskb@naver.com', 'j-lush@naver.com']; }
 
     function signedIn() { return request.auth != null; }
     function uid() { return request.auth.uid; }
